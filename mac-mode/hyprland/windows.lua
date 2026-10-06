@@ -14,12 +14,11 @@ o.window("kitty", { float = true, size = { 800, 600 }, center = true })
 o.window("Alacritty", { float = true, size = { 800, 600 }, center = true })
 
 -- Browsers: float, centered, large
-o.window("firefox", { float = true, size = { 1200, 800 }, center = true })
-o.window("Google-chrome", { float = true, size = { 1200, 800 }, center = true })
-o.window("google-chrome", { float = true, size = { 1200, 800 }, center = true })
-o.window("Brave-browser", { float = true, size = { 1200, 800 }, center = true })
-o.window("Chromium", { float = true, size = { 1200, 800 }, center = true })
-o.window("chromium", { float = true, size = { 1200, 800 }, center = true })
+o.window("firefox", { float = true, size = { "1200", "800" }, center = true })
+o.window("Google-chrome", { float = true, size = { "1200", "800" }, center = true })
+o.window("google-chrome", { float = true, size = { "1200", "800" }, center = true })
+o.window("Brave-browser", { float = true, size = { "1200", "800" }, center = true })
+o.window({ tag = "chromium-based-browser" }, { float = true, size = { "1200", "800" }, center = true })
 
 -- File manager: float, centered
 o.window("org.gnome.Nautilus", { float = true, size = { 900, 600 }, center = true })
