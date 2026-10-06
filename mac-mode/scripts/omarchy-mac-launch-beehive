@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# BeeHIVE Launcher for Omarchy Mac Mode
+# Opens BeeHIVE as a native-feeling application
+
+set -euo pipefail
+
+BEEHIVE_URL="${BEEHIVE_URL:-https://beehive.xspark.app}"
+APP_NAME="BeeHIVE"
+WM_CLASS="xspark-beehive"
+
+# Try to use nativefier-built app first, fall back to browser
+NATIVE_APP="$HOME/.local/share/omarchy-mac/beehive/beehive"
+
+if [[ -x "$NATIVE_APP" ]]; then
+  exec "$NATIVE_APP" "$@"
+else
+  # Use Chromium/Chrome in app mode for native feel
+  for browser in chromium google-chrome google-chrome-stable brave-browser microsoft-edge; do
+    if command -v "$browser" &>/dev/null; then
+      exec "$browser" \
+        --app="$BEEHIVE_URL" \
+        --class="$WM_CLASS" \
+        --name="$APP_NAME" \
+        --window-size=1280,800 \
+        --window-position=center \
+        --disable-features=TranslateUI \
+        --ozone-platform-hint=auto \
+        "$@" &
+      exit 0
+    fi
+  done
+
+  # Fallback to default browser
+  exec xdg-open "$BEEHIVE_URL"
+fi

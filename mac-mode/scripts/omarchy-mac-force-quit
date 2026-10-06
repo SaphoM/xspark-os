@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# omarchy:summary=Force quit the focused app (Mac Cmd+Opt+Esc)
+# omarchy:examples=omarchy-mac-force-quit
+
+PID=$(hyprctl activewindow -j 2>/dev/null | jq -r '.pid // empty')
+CLASS=$(hyprctl activewindow -j 2>/dev/null | jq -r '.class // empty')
+
+if [[ -z $PID ]]; then
+  omarchy osd -m "No active app" -d 900 >/dev/null 2>&1 || true
+  exit 0
+fi
+
+kill -9 "$PID" 2>/dev/null && STATE=ok || STATE=fail
+if [[ $STATE == ok ]]; then
+  omarchy osd -m "Force quit: ${CLASS:-app}" -d 900 >/dev/null 2>&1 || true
+else
+  omarchy osd -m "Could not force quit" -d 900 >/dev/null 2>&1 || true
+  exit 1
+fi

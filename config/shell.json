@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "idle": {
+    "screensaver": 150,
+    "lock": 300
+  },
+  "bar": {
+    "position": "top",
+    "transparent": true,
+    "centerAnchor": "omarchy.clock",
+    "layout": {
+      "left": [
+        {
+          "id": "xspark.macbar.apple"
+        },
+        {
+          "id": "omarchy.workspaces"
+        }
+      ],
+      "center": [
+        {
+          "id": "omarchy.clock",
+          "format": "EEE d MMM HH:mm",
+          "formatAlt": "EEEE, d MMMM yyyy"
+        }
+      ],
+      "right": [
+        {
+          "id": "omarchy.indicators"
+        },
+        {
+          "id": "xspark.macbar.controlcenter"
+        },
+        {
+          "id": "omarchy.tray"
+        },
+        {
+          "id": "omarchy.power"
+        }
+      ]
+    }
+  },
+  "plugins": [
+    {
+      "id": "omadock"
+    },
+    {
+      "id": "xspark.menu"
+    },
+    {
+      "id": "xspark.overview"
+    }
+  ],
+  "disabledPlugins": [],
+  "cloneSourceRestores": [
+    "xspark.menu"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "xspark.menu",
+  "name": "Apple menu",
+  "version": "1.0.0",
+  "author": "X Spark",
+  "description": "Mac-style drop-down menu anchored under the top-left Apple icon",
+  "kinds": [
+    "menu"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "menu": "Menu.qml"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.menu"
+  }
+}

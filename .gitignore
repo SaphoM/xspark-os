@@ -1,0 +1,6 @@
+# machine-specific / personal
+*.pre-mac
+*.pre-mac-*
+backup/
+.DS_Store
+*.log

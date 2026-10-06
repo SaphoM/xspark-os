@@ -1,0 +1,55 @@
+# X Spark OS
+
+A Mac-style desktop transformation for [Omarchy](https://github.com/omarchy/omarchy) (Hyprland-based Linux). Replaces the top bar with a macOS-style menu bar, adds an Apple-menu-style dropdown, Mission Control overview, a Control Center widget, and hairline HiDPI borders.
+
+## What's inside
+
+```
+config/shell.json            Omarchy user config: top bar layout, plugin registry (xspark.*)
+config/shell.toml            Theme overrides: hairline menu border (0.5), 20% menu translucency
+plugins/
+  macbar                     macOS-style menu bar (bar plugin)
+  macbar.apple               Apple icon widget — toggles the Apple menu dropdown
+  macbar.controlcenter       Control Center widget
+  menu                       Apple menu clone (menu plugin), anchored top-left under the Apple icon
+  overview                   Mission Control overview (MissionControl style grid, drag-free)
+mac-mode/
+  hyprland/                  Hyprland config (bindings, windows, gestures, looknfeel, input)
+  shell/                     mac-mode shell layout + bar
+  scripts/                   install/toggle/backup/restore + mac gestures (mission control, expose, ...)
+  theme/                     Color themes (mac-light, mac-dark, xspark-branded)
+bin/omarchy-menu             CLI shim for the menu (toggle/summon/close/refresh), resolves to the active menu plugin
+```
+
+## Install
+
+1. Copy the plugin dirs into your Omarchy user plugins:
+
+   ```sh
+   cp -r plugins/macbar plugins/macbar.apple plugins/macbar.controlcenter plugins/menu plugins/overview \
+     ~/.config/omarchy/plugins/
+   ```
+
+2. Merge `config/shell.json` into `~/.config/omarchy/shell.json` (that file also references `omadock`, a separate upstream dock — install it from its own repository or drop the entry).
+
+3. Copy `config/shell.toml` to `~/.config/omarchy/shell.toml` (optional: hairline border + translucency).
+
+4. Install the mac-mode layer (Hyprland config + scripts):
+
+   ```sh
+   mac-mode/scripts/install.sh
+   ```
+
+5. Add the CLI shim to your PATH (or copy to `~/.local/bin/omarchy-menu`).
+
+6. Restart the shell: `/usr/share/omarchy/bin/omarchy-restart-shell`.
+
+## Notes
+
+- **Apps menu**: the platform injects `shell.appLibrary` only for first-party menu plugins. The cloned menu owned by a third-party id receives a null bridge (a platform gap), so `plugins/menu/Menu.qml` falls back to a private `AppLibrary` instance, and keeps the injected one when/if the shell supplies it.
+- **Hairline borders**: on HiDPI (scale 2) a 1px border renders as 2 device pixels, so the menu border is `0.5` logical px (1 device px). Hyprland `general:border_size` is integer-only, so windows use `1`.
+- **QML edits**: hot reload / `rescanPlugins` serve a stale compiled cache for keep-loaded plugins; do a full shell restart after editing `Menu.qml`.
+
+## License
+
+The bundled plugin files retain their original licenses. mac-mode scripts and configs are provided as-is for personal use.

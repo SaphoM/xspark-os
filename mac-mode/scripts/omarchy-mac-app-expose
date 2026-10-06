@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# omarchy:summary=Show App Exposé (Mac-style windows of current app)
+# omarchy:examples=omarchy-mac-app-expose
+
+APP=$(hyprctl activewindow -j 2>/dev/null | jq -r '.class // empty')
+
+RESULT=$(omarchy-shell shell summon xspark.overview "{\"scope\":\"app\",\"app\":\"${APP}\"}" 2>&1 || true)
+if [[ $RESULT == ok ]]; then
+  exit 0
+fi
+
+omarchy osd -m "App Exposé unavailable" -d 1200 >/dev/null 2>&1 || true
+echo "App Exposé: xspark.overview plugin not installed yet" >&2
+exit 1

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "xspark.macbar",
+  "name": "MacBar",
+  "version": "1.0.0",
+  "author": "X Spark",
+  "description": "Mac-style menu bar for Omarchy",
+  "kinds": ["bar"],
+  "entryPoints": {
+    "bar": "MacBar.qml"
+  }
+}

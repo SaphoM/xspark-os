@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# omarchy:summary=Show Mission Control (Mac-style workspace overview)
+# omarchy:examples=omarchy-mac-mission-control
+
+RESULT=$(omarchy-shell shell summon xspark.overview '{"scope":"workspaces"}' 2>&1 || true)
+if [[ $RESULT == ok ]]; then
+  exit 0
+fi
+
+omarchy osd -m "Mission Control unavailable" -d 1200 >/dev/null 2>&1 || true
+echo "Mission Control: xspark.overview plugin not installed yet" >&2
+exit 1

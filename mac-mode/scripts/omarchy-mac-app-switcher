@@ -1,0 +1,104 @@
+#!/bin/bash
+
+# omarchy:summary=Mac-style application switcher (Cmd+Tab)
+# omarchy:examples=omarchy-mac-app-switcher [next|prev]
+#
+# MVP behaviour: cycles focus between *applications* (one window per app) and
+# shows the Omarchy OSD with the app name. The selection state resets when the
+# keys have not been pressed for a moment, so a held Cmd+Tab press cycle reads
+# as one continuous switch. A visual icon strip lands in a later pass.
+
+set -uo pipefail
+
+STATE_FILE="${XDG_RUNTIME_DIR:-/tmp}/omarchy-mac-app-switcher.state"
+HOLD_WINDOW=1500
+
+now_ms() { date +%s%3N; }
+
+# One entry per visible application: class + a window to focus.
+app_list() {
+  hyprctl clients -j \
+    | jq -r '[.[] | select(.mapped and ((.workspace.name // "") | startswith("special:") | not))]
+             | group_by(.class)
+             | map(sort_by(.focusHistoryID) | first)
+             | sort_by(.workspace.id, .at)
+             | .[] | "\(.class)\t\(.address)\t\(.title // "")"'
+}
+
+display_name() {
+  local class="$1" title="$2" desktop name
+  for desktop in "$HOME/.local/share/applications"/*.desktop; do
+    [[ -f $desktop ]] || continue
+    name=$(awk -F= '/^StartupWMClass=/{print $2; exit}' "$desktop")
+    if [[ "${name,,}" == "${class,,}" ]]; then
+      name=$(awk -F= '/^Name=/{print $2; exit}' "$desktop")
+      [[ -n $name ]] && { printf '%s' "$name"; return; }
+    fi
+  done
+  # Fall back to a tidied class name.
+  printf '%s' "$class" | sed -E 's/[-_.]+/ /g; s/\b(.)/\u\1/g'
+}
+
+mapfile -t CLASSES < <(app_list | cut -f1)
+mapfile -t ADDRS < <(app_list | cut -f2)
+mapfile -t TITLES < <(app_list | cut -f3)
+TOTAL=${#CLASSES[@]}
+(( TOTAL > 0 )) || exit 0
+
+active_class=$(hyprctl activewindow -j | jq -r '.class // empty')
+
+index_of_active() {
+  local i
+  for i in "${!CLASSES[@]}"; do
+    [[ ${CLASSES[$i]} == "$active_class" ]] && { echo "$i"; return; }
+  done
+  echo -1
+}
+
+base=$(index_of_active)
+(( base < 0 )) && base=0
+
+# Reset the cycle when this is a fresh switch (not a held Cmd+Tab).
+stamp=0
+[[ -f $STATE_FILE ]] && stamp=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
+now=$(now_ms)
+fresh_cycle=1
+if (( now - stamp < HOLD_WINDOW )); then
+  fresh_cycle=0
+fi
+echo "$now" > "$STATE_FILE"
+
+if (( fresh_cycle )); then
+  if [[ ${1:-next} == prev ]]; then
+    idx=$(( (base - 1 + TOTAL) % TOTAL ))
+  else
+    idx=$(( (base + 1) % TOTAL ))
+  fi
+else
+  # Continue from the previously highlighted app rather than the focused one.
+  prev_idx=$(cat "${STATE_FILE}.idx" 2>/dev/null || echo "")
+  if [[ -n $prev_idx && $prev_idx =~ ^[0-9]+$ && $prev_idx -lt $TOTAL ]]; then
+    if [[ ${1:-next} == prev ]]; then
+      idx=$(( (prev_idx - 1 + TOTAL) % TOTAL ))
+    else
+      idx=$(( (prev_idx + 1) % TOTAL ))
+    fi
+  else
+    idx=$(( (base + 1) % TOTAL ))
+  fi
+fi
+echo "$idx" > "${STATE_FILE}.idx"
+
+addr=${ADDRS[$idx]}
+title=${TITLES[$idx]}
+name=$(display_name "${CLASSES[$idx]}" "$title")
+
+# Restore first if the chosen app's window is minimized/hidden.
+if hyprctl clients -j | jq -e --arg a "$addr" \
+     '.[] | select(.address == $a and ((.workspace.name // "") | startswith("special:")))' >/dev/null 2>&1; then
+  omarchy-mac-winops restore "$addr"
+else
+  hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null 2>&1
+fi
+
+omarchy osd -m "$name" -d 900 >/dev/null 2>&1 || true

@@ -1,0 +1,114 @@
+#!/bin/bash
+
+# omarchy:summary=Mac-style window actions (minimize, hide, cycle, force quit)
+# omarchy:examples=omarchy-mac-winops <minimize|hide|hide-others|cycle|force-quit|restore>
+#
+# Dispatch is sent in Omarchy's Lua form (`hl.dsp...`) because this Hyprland
+# build evaluates `hyprctl dispatch` arguments as Lua; raw dispatcher syntax
+# like `hyprctl dispatch focuswindow addr` fails here.
+
+set -euo pipefail
+
+# Windows hidden/minimized live on Omadock's bucket ("special:minimized") so
+# the dock's minimize indicators and Cmd+M/Cmd+H stay in sync.
+SCRATCH="special:minimized"
+
+usage() {
+  echo "Usage: $(basename "$0") <minimize|hide|hide-others|cycle|force-quit|restore>" >&2
+  exit 1
+}
+
+lua_dispatch() {
+  hyprctl dispatch "$1" >/dev/null 2>&1 || true
+}
+
+escape_addr() { printf '%s' "$1"; }
+
+active_client() {
+  hyprctl activewindow -j 2>/dev/null || echo '{}'
+}
+
+# Visible normal windows (nothing on a special workspace).
+visible_clients() {
+  hyprctl clients -j | jq '[.[] | select(.mapped and ((.workspace.name // "") | startswith("special:") | not))]'
+}
+
+class_windows_visible() {
+  local class="$1"
+  visible_clients | jq --arg c "$class" '[.[] | select(.class == $c)]'
+}
+
+focus_window() {
+  local addr="$1"
+  [[ -n $addr ]] || return 0
+  lua_dispatch "hl.dsp.focus({ window = \"address:$addr\" })"
+}
+
+# Move a window onto the active workspace (undo minimize/hide), then focus it.
+restore_window() {
+  local addr="$1" ws
+  [[ -n $addr ]] || return 0
+  ws=$(hyprctl activeworkspace -j | jq -r '.name // "1"')
+  lua_dispatch "hl.dsp.window.move({ workspace = \"$ws\", follow = false, window = \"address:$addr\" })"
+  focus_window "$addr"
+}
+
+move_to_scratch() {
+  local addr="$1"
+  [[ -n $addr ]] || return 0
+  lua_dispatch "hl.dsp.window.move({ workspace = \"$SCRATCH\", follow = false, window = \"address:$addr\" })"
+}
+
+cmd_minimize() {
+  local addr
+  addr=$(active_client | jq -r '.address // empty')
+  [[ -n $addr ]] || exit 0
+  move_to_scratch "$addr"
+}
+
+cmd_hide() {
+  local class addr
+  class=$(active_client | jq -r '.class // empty')
+  [[ -n $class ]] || exit 0
+  while read -r addr; do
+    [[ -n $addr ]] && move_to_scratch "$addr"
+  done < <(class_windows_visible "$class" | jq -r '.[].address')
+}
+
+cmd_hide_others() {
+  local class keep addr
+  class=$(active_client | jq -r '.class // empty')
+  [[ -n $class ]] || exit 0
+  keep=$(active_client | jq -r '.address // empty')
+  while read -r addr; do
+    [[ -n $addr && $addr != "$keep" ]] && move_to_scratch "$addr"
+  done < <(visible_clients | jq -r --arg c "$class" '.[] | select(.class != $c) | .address')
+}
+
+cmd_cycle() {
+  local class current count idx next
+  class=$(active_client | jq -r '.class // empty')
+  current=$(active_client | jq -r '.address // empty')
+  [[ -n $class ]] || exit 0
+  count=$(class_windows_visible "$class" | jq 'length')
+  (( count > 1 )) || exit 0
+  idx=$(class_windows_visible "$class" | jq --arg a "$current" '[.[].address] | index($a) // 0')
+  next=$(class_windows_visible "$class" | jq -r --argjson i "$idx" '.[($i + 1) % length].address')
+  focus_window "$next"
+}
+
+cmd_force_quit() {
+  local pid
+  pid=$(active_client | jq -r '.pid // empty')
+  [[ -n $pid ]] && kill -9 "$pid" 2>/dev/null || true
+}
+
+case "${1:-}" in
+  minimize) cmd_minimize ;;
+  hide) cmd_hide ;;
+  hide-others) cmd_hide_others ;;
+  cycle) cmd_cycle ;;
+  force-quit) cmd_force_quit ;;
+  restore) restore_window "${2:-}" ;;
+  *) usage ;;
+esac

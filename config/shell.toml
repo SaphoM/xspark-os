@@ -1,0 +1,8 @@
+# Machine-level overrides layered on top of the active theme.
+# User keys win; this file survives theme switches.
+
+[menu]
+# Hairline menu border on HiDPI (scale 2): 0.5 logical px = 1 device px.
+border-width = 0.5
+# 20% transparent (80% opaque).
+background-alpha = 0.8

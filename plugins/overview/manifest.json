@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "xspark.overview",
+  "name": "Mission Control Overview",
+  "version": "1.0.0",
+  "author": "X Spark",
+  "description": "Mac-style Mission Control: full-screen workspace and window overview",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Overview.qml"
+  },
+  "tags": [
+    "overview",
+    "mission-control",
+    "quickshell",
+    "hyprland"
+  ]
+}
