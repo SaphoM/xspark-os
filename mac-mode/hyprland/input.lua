@@ -48,6 +48,8 @@ hl.config({
     repeat_delay = 300,
     numlock_by_default = false,
 
+    follow_mouse = 0,                  -- Click to focus (macOS behavior), not hover
+
     touchpad = {
       -- Mac-like trackpad behavior
       natural_scroll = true,           -- Natural scrolling (content follows fingers)
