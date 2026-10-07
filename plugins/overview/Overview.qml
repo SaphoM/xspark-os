@@ -24,6 +24,10 @@ Item {
   property string omarchyPath: ""
   property var manifest: null
 
+  // Ensure root has screen size so PanelWindow anchors work
+  width: 1920
+  height: 1080
+
   readonly property int wsStripHeight: Math.max(96, Style.space(120))
   readonly property string focusedWsName: Hyprland.focusedWorkspace
     ? String(Hyprland.focusedWorkspace.name || Hyprland.focusedWorkspace.id || "")
