@@ -1,6 +1,6 @@
 # X Spark OS
 
-A Mac-style desktop transformation for [Omarchy](https://github.com/omarchy/omarchy) (Hyprland-based Linux). Replaces the top bar with a macOS-style menu bar, adds an Apple-menu-style dropdown, Mission Control overview, a Control Center widget, and hairline HiDPI borders.
+A Mac-style desktop transformation for [Omarchy](https://github.com/omarchy/omarchy) (Hyprland-based Linux). Replaces the top bar with a macOS-style menu bar, adds an Apple-menu-style dropdown, an App Exposé overview, a Control Center widget, and hairline HiDPI borders.
 
 ## What's inside
 
@@ -12,11 +12,11 @@ plugins/
   macbar.apple               Apple icon widget — toggles the Apple menu dropdown
   macbar.controlcenter       Control Center widget
   menu                       Apple menu clone (menu plugin), anchored top-left under the Apple icon
-  overview                   Mission Control overview (MissionControl style grid, drag-free)
+  overview                   App Exposé (macOS-style card row of an app's windows, drag-free)
 mac-mode/
   hyprland/                  Hyprland config (bindings, windows, gestures, looknfeel, input)
   shell/                     mac-mode shell layout + bar
-  scripts/                   install/toggle/backup/restore + mac gestures (mission control, expose, ...)
+  scripts/                   install/toggle/backup/restore + mac gestures (app expose, ...)
   theme/                     Color themes (mac-light, mac-dark, xspark-branded)
 bin/omarchy-menu             CLI shim for the menu (toggle/summon/close/refresh), resolves to the active menu plugin
 ```

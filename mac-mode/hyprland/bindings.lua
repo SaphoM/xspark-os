@@ -38,12 +38,13 @@ o.bind("SUPER + ALT + M", "Minimize App Windows", "omarchy-mac-winops hide")
 o.bind("SUPER + ALT + ESCAPE", "Force Quit", "omarchy-mac-force-quit")
 
 -- ============================================================
--- WORKSPACES / OVERVIEW
+-- WORKSPACES / MISSION CONTROL / APP EXPOSÉ
 -- ============================================================
 
 o.bind("CTRL + LEFT", "Previous Workspace", hl.dsp.focus({ workspace = "e-1" }))
 o.bind("CTRL + RIGHT", "Next Workspace", hl.dsp.focus({ workspace = "e+1" }))
 o.bind("CTRL + UP", "Mission Control", "omarchy-mac-mission-control")
+o.bind("F3", "Mission Control", "omarchy-mac-mission-control")
 o.bind("CTRL + DOWN", "App Exposé", "omarchy-mac-app-expose")
 
 -- ============================================================
@@ -52,8 +53,8 @@ o.bind("CTRL + DOWN", "App Exposé", "omarchy-mac-app-expose")
 
 o.bind("SUPER + SHIFT + 3", "Full Screenshot", "omarchy-capture-screenshot")
 o.bind("SUPER + SHIFT + 4", "Area Screenshot", "omarchy-capture-region")
-o.bind("SUPER + SHIFT + 5", "Screenshot UI", "omarchy-menu toggle capture")
 o.bind("SUPER + SHIFT + W", "Capture Window", "omarchy-mac-capture-window")
+o.bind("SUPER + SHIFT + 5", "Screenshot UI", "omarchy-menu toggle capture")
 
 -- ============================================================
 -- LOCK (Cmd+Shift+Ctrl+Q style stays on SUPER+CTRL+L)

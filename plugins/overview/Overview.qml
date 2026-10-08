@@ -4,19 +4,21 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Wayland
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
-// Mac-style Mission Control.
+// Mac-style App Exposé / Mission Control.
 //
 // Summoned by the shell with:
-//   omarchy-shell shell summon xspark.overview '{"scope":"workspaces"}'
 //   omarchy-shell shell summon xspark.overview '{"scope":"app","app":"<class>"}'
+//   omarchy-shell shell summon xspark.overview '{"scope":"mission"}'
 //
-// "workspaces" shows every workspace across the top plus the windows of the
-// focused workspace in a grid (Mission Control). "app" shows only the windows
-// matching an app class (App Exposé). Clicking a window focuses it, clicking a
-// workspace switches to it, Escape or an empty click closes.
+// App Exposé shows the windows matching an app class as a horizontal row of
+// cards; Mission Control shows every window on the current desktop. Each card
+// snapshots its own window (grim per-window geometry); windows that are not
+// currently rendered (other workspaces) fall back to the app glyph.
+// Clicking a card focuses it, Escape or an empty click closes.
 Item {
   id: root
 
@@ -24,7 +26,6 @@ Item {
   property string omarchyPath: ""
   property var manifest: null
 
-  readonly property int wsStripHeight: Math.max(96, Style.space(120))
   readonly property string focusedWsName: Hyprland.focusedWorkspace
     ? String(Hyprland.focusedWorkspace.name || Hyprland.focusedWorkspace.id || "")
     : ""
@@ -33,18 +34,23 @@ Item {
     : ""
 
   property bool opened: false
-  property string scope: "workspaces"
+  property string scope: ""
   property string appFilter: ""
+
+  // Window-thumbnail capture. The overlay only maps once `thumbsPending`
+  // clears, so grims snag clean live windows instead of the dim overlay.
+  property bool thumbsPending: false
+  property bool thumbsReady: false
+  readonly property string thumbsDir: "/tmp/xspark-overview-thumbs"
 
   // ---------------------------------------------------------------- API
 
   function open(payloadJson) {
     var payload = ({})
     try { payload = JSON.parse(payloadJson || "{}") } catch (e) { payload = ({}) }
-    var nextScope = String(payload.scope || "workspaces")
     var nextApp = String(payload.app || "")
-    // Re-summoning the same view toggles it closed (macOS gesture rhythm);
-    // summoning a different scope re-targets without a close.
+    var nextScope = String(payload.scope || (nextApp ? "app" : "mission"))
+    // Re-summoning the same view toggles it closed (macOS gesture rhythm).
     if (root.opened && nextScope === root.scope && nextApp === root.appFilter) {
       root.close()
       return
@@ -52,18 +58,23 @@ Item {
     root.scope = nextScope
     root.appFilter = nextApp
     root.opened = true
+    root.thumbsPending = true
+    root.thumbsReady = false
     root.refreshWindows()
-    root.refreshWorkspaces()
+    root.startThumbCapture()
+    console.log("xspark.overview open scope=", nextScope, "app=", nextApp, "ws=", root.focusedWsId)
     // Hyprland.toplevels can still be mid-sync when we just mounted; re-read
     // on the next event-loop tick so a momentary empty list never sticks.
     Qt.callLater(function() {
       root.refreshWindows()
-      root.refreshWorkspaces()
     })
   }
 
   function close() {
     root.opened = false
+    root.thumbsPending = false
+    root.thumbsFallback.stop()
+    if (thumbProc.running) thumbProc.running = false
   }
 
   function hideSelf() {
@@ -74,13 +85,83 @@ Item {
     }
   }
 
+  // ------------------------------------------------ window thumbnails
+
+  function thumbPath(address) {
+    if (!address) return ""
+    return root.thumbsDir + "/" + String(address) + ".jpg"
+  }
+
+  function startThumbCapture() {
+    // Raising each window before its grab adds ~0.3s/window; size the safety
+    // net so a slow bag of windows never maps the overlay mid-capture.
+    root.thumbsFallback.interval = Math.max(2000, 1200 + (root.windows.length || 0) * 400)
+    root.thumbsFallback.restart()
+    if (thumbProc.running) thumbProc.running = false
+    thumbProc.command = ["bash", "-lc", root.captureCommand()]
+    thumbProc.running = true
+  }
+
+  // Snapshot each in-scope window on the focused workspace to a small JPEG,
+  // then let the overlay map. grim only reads the composited framebuffer, so
+  // on a floating desktop a covered window's geometry shows whatever is on
+  // top of it -- several windows in one card. To capture a true per-window
+  // image each target is raised to the top momentarily, grabbed, then the
+  // originally focused window is put back up. Geometry is layout coordinates,
+  // the same space `hyprctl clients` reports `at`/`size` in, and is clamped to
+  // the focused monitor so an off-screen window never bleeds desktop into the
+  // card. Windows on other workspaces aren't rendered, so they fall back to
+  // the glyph.
+  function captureCommand() {
+    var ws = String(root.focusedWsId || "")
+    var cls = String(root.appFilter || "")
+    var dir = Util.shellQuote(root.thumbsDir)
+    var program =
+      "[.[] | select(.mapped==true and .hidden!=true) | " +
+      "select((.workspace.id|tostring)==$ws) | " +
+      "select((.class // .initialClass // \"\") | ascii_downcase | contains($cls|ascii_downcase)) | " +
+      "select((.at[0]!=null) and (.size[0]!=null) and (.size[0]>0) and (.size[1]>0)) | " +
+      "\"\\(.address) \\(.at[0]) \\(.at[1]) \\(.size[0]) \\(.size[1])\"] | .[]"
+    var nl = "\n"
+    return "ORIG=$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty' 2>/dev/null || true); " + nl +
+      "rm -rf " + dir + "; mkdir -p " + dir + "; " + nl +
+      "MON=$(hyprctl monitors -j 2>/dev/null | jq -r '.[]|select(.focused==true)|(.width/.scale|floor|tostring) + \" \" + (.height/.scale|floor|tostring)' | head -1); " + nl +
+      "MON_W=${MON%% *}; MON_H=${MON##* }; " + nl +
+      "hyprctl -j clients | jq -r --arg ws " + Util.shellQuote(ws) +
+      " --arg cls " + Util.shellQuote(cls) + " '" + program + "' | while read -r ADDR X Y W H; do " + nl +
+      "  hyprctl dispatch focuswindow address:$ADDR >/dev/null 2>&1 || true; " + nl +
+      "  [ -n \"$MON_W\" ] && { [ $X -lt 0 ] && X=0; [ $Y -lt 0 ] && Y=0; [ $((X+W)) -gt $MON_W ] && W=$((MON_W-X)); [ $((Y+H)) -gt $MON_H ] && H=$((MON_H-Y)); }; " + nl +
+      "  [ $W -le 0 ] && continue; [ $H -le 0 ] && continue; " + nl +
+      "  grim -g \"$X,$Y ${W}x${H}\" -t jpeg -q 90 \"" + root.thumbsDir + "/$ADDR.jpg\" || true; " + nl +
+      "done; " + nl +
+      "[[ -n $ORIG ]] && hyprctl dispatch focuswindow address:$ORIG >/dev/null 2>&1; true"
+  }
+
+  // Safety net: if grim/jq is missing or the capture wedges, still open the
+  // overview (cards fall back to their glyph) rather than hanging invisible.
+  property Timer thumbsFallback: Timer {
+    interval: 2500
+    onTriggered: function() {
+      root.thumbsPending = false
+    }
+  }
+
+  Process {
+    id: thumbProc
+    running: false
+    onExited: function(exitCode) {
+      console.log("xspark.overview thumbs exited", exitCode)
+      root.thumbsPending = false
+      root.thumbsReady = true
+      root.thumbsFallback.stop()
+    }
+  }
+
   // ------------------------------------------------------------ data model
 
-  readonly property var activeWorkspaceName: root.focusedWsName
   readonly property var activeWorkspaceId: root.focusedWsId
 
   property var windows: []
-  property var workspaces: []
   property var _winSig: ""
 
   // Quickshell 0.3.1's HyprWindow shortcuts (mapped/hidden/class/…) are
@@ -109,23 +190,20 @@ Item {
 
   function titleOf(h) {
     var io = root.ioOf(h)
-    var t = String(io.title || (h && h.title) || io.initialTitle || (h && h.initialTitle) || "").trim()
+    var t = String(io.title || (h && h.title) || io.initialTitle || (h && (h.initialTitle)) || "").trim()
     return t || root.appLabelFor(h)
   }
 
   // A window is "in scope" when it is mapped, not hidden, not pinned to a
-  // special workspace, and matches the app filter when one is set.
+  // special workspace, and matches the app filter.
   function windowInScope(h) {
     if (!h) return false
     if (root.hiddenOf(h) || !root.mappedOf(h)) return false
     var wsName = root.workspaceOf(h).name
     if (String(wsName).indexOf("special") === 0) return false
-    if (root.scope === "app") {
-      var cls = root.classOf(h)
-      if (!cls) return false
-      return cls.toLowerCase().indexOf(String(root.appFilter).toLowerCase()) >= 0
-    }
-    return true
+    var cls = root.classOf(h)
+    if (!cls) return false
+    return cls.toLowerCase().indexOf(String(root.appFilter).toLowerCase()) >= 0
   }
 
   function toplevelForHypr(h) {
@@ -177,10 +255,55 @@ Item {
     }
   }
 
-  function appLabelFor(h) {
-    var raw = root.classOf(h)
+  function appLabelFor(cls) {
+    var raw = String(cls == null ? "" : cls)
     var parts = raw.split(".")
-    return parts[parts.length - 1]
+    // Drop trailing token/hash segments like "_e141da…b7" or "abc123".
+    while (parts.length > 1) {
+      var last = parts[parts.length - 1]
+      if (/^_?[0-9a-fA-F]{8,}$/.test(last)) { parts.pop(); continue }
+      break
+    }
+    var name = parts[parts.length - 1] || ""
+    return name
+  }
+
+  property var appNameMap: ({
+    "org.telegram.desktop": "Telegram",
+    "org.omarchy.agent": "Omarchy Agent",
+    "org.mozilla.firefox": "Firefox",
+    "org.mozilla.firefox.esr": "Firefox",
+    "org.gnome.Nautilus": "Files",
+    "org.wezfurlong.wezterm": "WezTerm",
+    "com.mitchellh.ghostty": "Ghostty",
+    "foot": "Terminal",
+    "org.omarchy.screensaver": "Screen Saver"
+  })
+
+  // A readable window/app name for card labels, falling back to the shortest
+  // dotted class segment for anything unmapped.
+  function appNameFor(cls) {
+    var c = String(cls == null ? "" : cls)
+    for (var k in root.appNameMap) {
+      if (c.indexOf(k) === 0) return root.appNameMap[k]
+    }
+    var fallback = root.appLabelFor(c)
+    if (fallback) return fallback
+    return c || "Unknown"
+  }
+
+  // The window's true aspect ratio, clamped so no card goes extreme.
+  function windowAspect(h) {
+    var sz = root.ioOf(h).size
+    var w = sz && sz[0] ? Number(sz[0]) : 0
+    var ht = sz && sz[1] ? Number(sz[1]) : 0
+    if (w > 0 && ht > 0) {
+      var a = w / ht
+      if (a < 0.5) a = 0.5
+      if (a > 2.4) a = 2.4
+      return a
+    }
+    return 1.6
   }
 
   function windowTitleOf(h) {
@@ -201,8 +324,9 @@ Item {
       out.push({
         address: addr,
         title: root.windowTitleOf(h),
-        app: appLabelFor(h),
+        app: root.appNameFor(root.classOf(h)),
         class: root.classOf(h),
+        aspect: root.windowAspect(h),
         workspaceId: ws.id,
         workspaceName: ws.name,
         active: ws.id === root.activeWorkspaceId
@@ -221,51 +345,12 @@ Item {
     }
   }
 
-  function refreshWorkspaces() {
-    var list = Hyprland.workspaces ? Hyprland.workspaces.values : []
-    var out = []
-    for (var i = 0; i < list.length; i++) {
-      var ws = list[i]
-      var name = String(ws.name || (ws.id != null ? ws.id : ""))
-      if (name.indexOf("special") === 0) continue
-      var count = 0
-      var winList = Hyprland.toplevels ? Hyprland.toplevels.values : []
-      for (var w = 0; w < winList.length; w++) {
-        var h = winList[w]
-        if (!h || root.hiddenOf(h) || !root.mappedOf(h)) continue
-        var wname = root.workspaceOf(h).name
-        if (wname === name && String(wname).indexOf("special") !== 0) count += 1
-      }
-      out.push({
-        id: String(ws.id != null ? ws.id : ""),
-        name: name,
-        monitor: (ws.monitor && ws.monitor.name) ? String(ws.monitor.name) : "",
-        count: count,
-        active: name === root.activeWorkspaceName || String(ws.id) === root.activeWorkspaceId
-      })
-    }
-    out.sort(function (a, b) {
-      var na = parseInt(a.id, 10), nb = parseInt(b.id, 10)
-      if (!isNaN(na) && !isNaN(nb)) return na - nb
-      return a.name < b.name ? -1 : 1
-    })
-    root.workspaces = out
-  }
-
   function luaString(value) {
     return String(value == null ? "" : value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')
   }
 
   function hyprDispatch(lua, legacy) {
     if (Hyprland.dispatch) Hyprland.dispatch(Hyprland.usingLua ? lua : legacy)
-  }
-
-  function switchToWorkspace(name) {
-    if (!name) return
-    if (name !== root.focusedWsName) {
-      root.hyprDispatch('hl.dsp.focus({ workspace = "' + root.luaString(name) + '" })', "workspace " + name)
-    }
-    root.hideSelf()
   }
 
   function activateWindow(row) {
@@ -291,12 +376,6 @@ Item {
     }
   }
   Connections {
-    target: Hyprland.workspaces
-    function onValuesChanged() {
-      refreshTimer.restart()
-    }
-  }
-  Connections {
     target: Hyprland
     function onFocusedWorkspaceChanged() { refreshTimer.restart() }
   }
@@ -305,7 +384,6 @@ Item {
     interval: 120
     onTriggered: function() {
       root.refreshWindows()
-      root.refreshWorkspaces()
     }
   }
 
@@ -314,7 +392,7 @@ Item {
   PanelWindow {
     id: overlayWin
 
-    visible: root.opened
+    visible: root.opened && !root.thumbsPending
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.namespace: "xspark-overview"
@@ -347,190 +425,186 @@ Item {
       }
     }
 
-    // Header row of the whole overview.
-    Column {
-      id: overviewCol
+    // ------------------------------------------------------ card row
+    Item {
+      id: appRowArea
       anchors.fill: parent
       anchors.topMargin: Style.gapsOut
       anchors.bottomMargin: Style.gapsOut
       anchors.leftMargin: Style.gapsOut * 2
       anchors.rightMargin: Style.gapsOut * 2
-      spacing: Style.spacing.lg
 
-      // ------------------------------------------------ workspaces strip
-      Item {
-        id: wsStrip
-        width: parent.width
-        height: root.wsStripHeight
+      readonly property int cardH: Math.max(180, Math.min(Math.round(overlayWin.height * 0.42), height - Style.space(90)))
+      readonly property int cardRadius: Math.max(12, Style.cornerRadius)
 
-        Flow {
-          id: wsFlow
-          anchors.fill: parent
-          spacing: Style.spacing.md
+      Flickable {
+        id: appRowScroll
+        anchors.fill: parent
+        contentWidth: width
+        contentHeight: Math.max(height, appRow.height)
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
 
-          Repeater {
-            model: root.workspaces
-            delegate: WsCard
-          }
-        }
-      }
+        Item {
+          id: appRow
+          width: Math.max(appRowScroll.width, appFlow.width + Style.spacing.lg * 2)
+          height: appRowScroll.height
 
-      // ------------------------------------------------ window grid
-      Item {
-        id: winGridArea
-        width: parent.width
-        height: parent.height - wsStrip.height - Style.spacing.lg
-
-        Flickable {
-          id: winScroll
-          anchors.fill: parent
-          contentWidth: parent.width
-          contentHeight: Math.max(parent.height, winFlow.height)
-          clip: true
-          boundsBehavior: Flickable.StopAtBounds
-          ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-
-          Flow {
-            id: winFlow
-            width: parent.width
+          Row {
+            id: appFlow
+            anchors.centerIn: parent
             spacing: Style.spacing.lg
 
             Repeater {
               model: root.windows
-              delegate: WindowCard
-            }
 
-            // Empty state.
-            Item {
-              width: parent.width
-              height: 160
-              visible: root.windows.length === 0
-              Text {
-                anchors.centerIn: parent
-                color: Color.menu.text
-                opacity: 0.6
-                font.family: Style.font.body
-                font.pixelSize: Style.font.body
-                text: root.scope === "app"
-                  ? "No windows for this app"
-                  : (root.workspaces.length === 0 ? "No workspaces" : "No windows on this workspace")
+              delegate: Item {
+                id: appCard
+                required property var modelData
+
+                width: appCardCol.width
+                height: appCardCol.height
+
+                Column {
+                  id: appCardCol
+                  spacing: Style.spacing.md
+
+                  Item {
+                    id: cardFrame
+                    // Size to the window's real aspect so the snapshot fills
+                    // the card edge-to-edge with no cropping.
+                    width: Math.max(120, Math.round(appRowArea.cardH * Math.max(0.5, Math.min(2.4, modelData.aspect || 1.6))))
+                    height: appRowArea.cardH
+
+                    MultiEffect {
+                      anchors.fill: cardSurface
+                      anchors.margins: -18
+                      source: cardSurface
+                      shadowEnabled: true
+                      shadowBlur: 0.55
+                      shadowVerticalOffset: 10
+                      shadowColor: "#B3000000"
+                    }
+
+                    Rectangle {
+                      id: cardSurface
+                      anchors.fill: parent
+                      radius: appRowArea.cardRadius
+                      color: Util.alpha(Color.menu.background, 0.92)
+                      border.width: Math.max(1, Math.round(Style.space(1)))
+                      border.color: cardMouse.containsMouse
+                        ? Util.alpha(Color.accent, 0.75)
+                        : Util.alpha(Color.menu.text, 0.22)
+
+                      // Live window snapshot, masked to the card's rounding.
+                      Item {
+                        id: thumbStage
+                        anchors.fill: parent
+                        layer.enabled: true
+                        layer.smooth: true
+                        layer.effect: MultiEffect {
+                          maskEnabled: true
+                          maskSource: thumbMask
+                          maskThresholdMin: 0.4
+                          maskSpreadAtMin: 0.05
+                        }
+
+                        Image {
+                          id: thumbImage
+                          anchors.fill: parent
+                          source: root.thumbsReady ? Util.fileUrl(root.thumbPath(modelData.address)) : ""
+                          fillMode: Image.PreserveAspectCrop
+                          asynchronous: true
+                          cache: false
+                          smooth: true
+                        }
+
+                        Rectangle {
+                          id: thumbMask
+                          anchors.fill: parent
+                          radius: appRowArea.cardRadius
+                          color: "white"
+                          visible: false
+                          layer.enabled: true
+                        }
+                      }
+
+                      // Glyph fallback for cards whose window could not be
+                      // snapshotted (other workspace, capture failure).
+                      Column {
+                        anchors.centerIn: parent
+                        spacing: Style.spacing.sm
+                        visible: thumbImage.status !== Image.Ready
+
+                        Text {
+                          anchors.horizontalCenter: parent.horizontalCenter
+                          text: "▣"
+                          color: cardMouse.containsMouse ? Color.accent : Util.alpha(Color.menu.text, 0.75)
+                          font.family: Style.font.icon
+                          font.pixelSize: Math.round(cardFrame.height * 0.2)
+                        }
+
+                        Text {
+                          anchors.horizontalCenter: parent.horizontalCenter
+                          text: modelData.app
+                          color: Util.alpha(Color.menu.text, 0.6)
+                          font.family: Style.font.caption
+                          font.pixelSize: Style.font.caption
+                        }
+                      }
+                    }
+                  }
+
+                  Column {
+                    width: cardFrame.width
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: Style.spacing.sm
+
+                    Text {
+                      width: parent.width
+                      text: modelData.app
+                      color: cardMouse.containsMouse ? Color.accent : Color.menu.text
+                      elide: Text.ElideRight
+                      horizontalAlignment: Text.AlignHCenter
+                      font.family: Style.font.caption
+                      font.pixelSize: Style.font.caption
+                      font.bold: true
+                    }
+
+                    Text {
+                      width: parent.width
+                      text: modelData.title
+                      color: Util.alpha(Color.menu.text, 0.85)
+                      elide: Text.ElideRight
+                      horizontalAlignment: Text.AlignHCenter
+                      font.family: Style.font.body
+                      font.pixelSize: Style.font.body
+                    }
+                  }
+                }
+
+                MouseArea {
+                  id: cardMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  onClicked: root.activateWindow(modelData)
+                }
               }
             }
           }
         }
       }
-    }
-  }
 
-  // ------------------------------------------------------ workspace card
-  component WsCard: Rectangle {
-    id: wsCardRoot
-    required property var modelData
-
-    width: Math.max(120, Math.min(200, (wsStrip.width - Style.spacing.md * 2) / 3))
-    height: root.wsStripHeight
-    radius: Style.cornerRadius
-    border.width: modelData.active ? Math.max(2, Math.round(Style.space(1.5))) : Math.max(1, Math.round(Style.space(1)))
-    border.color: modelData.active ? Color.accent : Util.alpha(Color.menu.text, 0.18)
-    color: modelData.active ? Util.alpha(Color.accent, 0.16) : Util.alpha(Color.menu.background, 0.7)
-
-    MouseArea {
-      anchors.fill: parent
-      onClicked: root.switchToWorkspace(modelData.name)
-      hoverEnabled: true
-    }
-
-    Column {
-      anchors.centerIn: parent
-      spacing: Style.spacing.xs
-
+      // Empty state.
       Text {
-        anchors.horizontalCenter: parent.horizontalCenter
-        text: "☰"
-        color: modelData.active ? Color.accent : Util.alpha(Color.menu.text, 0.7)
-        font.family: Style.font.icon
-        font.pixelSize: Style.space(22)
-      }
-
-      Text {
-        anchors.horizontalCenter: parent.horizontalCenter
-        text: modelData.name
+        anchors.centerIn: parent
+        visible: root.windows.length === 0
         color: Color.menu.text
-        font.family: Style.font.heading
-        font.pixelSize: Style.font.heading
-      }
-
-      Text {
-        anchors.horizontalCenter: parent.horizontalCenter
-        text: modelData.count + " window" + (modelData.count === 1 ? "" : "s")
-        color: Util.alpha(Color.menu.text, 0.55)
-        font.family: Style.font.caption
-        font.pixelSize: Style.font.caption
-      }
-    }
-  }
-
-  // ------------------------------------------------------ window card
-  component WindowCard: Rectangle {
-    id: winCard
-    required property var modelData
-
-    width: Math.max(280, Math.min(420, (winFlow.width - Style.spacing.lg * 2) / 2))
-    height: 140
-    radius: Style.cornerRadius
-    border.width: Math.max(1, Math.round(Style.space(1)))
-    border.color: modelData.active ? Util.alpha(Color.accent, 0.6) : Util.alpha(Color.menu.text, 0.18)
-    color: Util.alpha(Color.menu.background, 0.85)
-
-    MouseArea {
-      anchors.fill: parent
-      onClicked: root.activateWindow(modelData)
-      hoverEnabled: true
-    }
-
-    Row {
-      anchors.fill: parent
-      anchors.margins: Style.space(16)
-      spacing: Style.space(14)
-
-      Rectangle {
-        width: 52
-        height: 52
-        radius: Math.max(8, Math.round(Style.cornerRadius / 2))
-        color: Util.alpha(modelData.active ? Color.accent : Color.muted, 0.16)
-        anchors.verticalCenter: parent.verticalCenter
-
-        Text {
-          anchors.centerIn: parent
-          text: "▣"
-          color: Color.menu.text
-          font.family: Style.font.icon
-          font.pixelSize: Style.space(24)
-        }
-      }
-
-      Column {
-        anchors.verticalCenter: parent.verticalCenter
-        width: parent.width - 52 - Style.space(14)
-        spacing: Style.space(6)
-
-        Text {
-          width: parent.width
-          text: modelData.title
-          color: Color.menu.text
-          elide: Text.ElideRight
-          font.family: Style.font.body
-          font.pixelSize: Style.font.body
-        }
-
-        Text {
-          width: parent.width
-          text: modelData.app + (modelData.workspaceName ? "  ·  WS " + modelData.workspaceName : "")
-          color: modelData.active ? Color.accent : Util.alpha(Color.menu.text, 0.5)
-          elide: Text.ElideRight
-          font.family: Style.font.caption
-          font.pixelSize: Style.font.caption
-        }
+        opacity: 0.6
+        font.family: Style.font.body
+        font.pixelSize: Style.font.body
+        text: "No windows for this app"
       }
     }
   }

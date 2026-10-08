@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "id": "xspark.overview",
-  "name": "Mission Control Overview",
-  "version": "1.0.0",
+  "name": "App Exposé",
+  "version": "1.1.0",
   "author": "X Spark",
-  "description": "Mac-style Mission Control: full-screen workspace and window overview",
+  "description": "Mac-style App Exposé: horizontal card row of the current app's windows",
   "kinds": [
     "overlay"
   ],
@@ -13,8 +13,8 @@
     "overlay": "Overview.qml"
   },
   "tags": [
+    "expose",
     "overview",
-    "mission-control",
     "quickshell",
     "hyprland"
   ]
