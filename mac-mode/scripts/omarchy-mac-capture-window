@@ -24,8 +24,10 @@ TMP=$(mktemp --suffix=.png)
 
 if grim -g "$GEO" - >"$TMP"; then
   mv -f "$TMP" "$FILEPATH"
-  wl-copy --type image/png <"$FILEPATH"
-  omarchy-notification-send "Window screenshot saved" "$FILEPATH" --image "$FILEPATH" || true
+  # wl-copy daemonizes to serve the clipboard; its child must not hold the
+  # caller's stdout/stderr open (that would hang scripts run from a shell).
+  wl-copy --type image/png <"$FILEPATH" >/dev/null 2>&1
+  omarchy-notification-send "Window screenshot saved" "$FILEPATH" --image "$FILEPATH" >/dev/null 2>&1 || true
   echo "$FILEPATH"
 else
   rm -f "$TMP"
