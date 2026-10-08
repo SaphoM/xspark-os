@@ -321,8 +321,8 @@ Item {
     { type: "separator" },
     { label: "Force Quit...", action: "omarchy-mac-force-quit" },
     { label: "Sleep", action: "systemctl suspend" },
-    { label: "Restart...", action: "systemctl reboot" },
-    { label: "Shut Down...", action: "systemctl poweroff" },
+    { label: "Restart...", action: "xspark-system-reboot" },
+    { label: "Shut Down...", action: "xspark-system-shutdown" },
     { type: "separator" },
     { label: "Lock Screen", action: "omarchy-system-lock" },
     { label: "Log Out...", action: "omarchy-session-logout" }

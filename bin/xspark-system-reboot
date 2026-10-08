@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# omarchy:summary=Reboot via omarchy-system-reboot after saving window/session state
+# omarchy:examples=xspark-system-reboot
+
+# Save the windows while they are all still open, then nudge opencode's WAL
+# onto disk so the last messages survive a power cut. The reboot itself goes
+# through omarchy-system-reboot so every app still gets its graceful close.
+command -v session-restore >/dev/null 2>&1 && session-restore save || true
+
+DB="$HOME/.local/share/opencode/opencode.db"
+if [[ -f $DB ]] && command -v sqlite3 >/dev/null 2>&1; then
+  timeout 1 sqlite3 "$DB" 'PRAGMA wal_checkpoint(PASSIVE);' >/dev/null 2>&1 || true
+fi
+
+exec omarchy-system-reboot

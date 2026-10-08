@@ -1,0 +1,225 @@
+#!/bin/bash
+
+# omarchy:summary=Reopen apps/windows after shutdown, restart, hibernate or power loss
+# omarchy:args=[track|on|off|toggle|status|now|save]
+# omarchy:examples=session-restore status | session-restore off | session-restore now
+#
+# `track` runs from Hyprland autostart: it reopens what was open before the
+# machine went down, then follows window events so the saved state is always
+# current — covering shutdowns, restarts, hibernate and power cuts.
+# on/off/toggle control the option, `now` reopens immediately, `save` takes a
+# synchronous snapshot (used by the reboot/shutdown wrappers).
+
+set -u
+
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/session-restore"
+WINDOWS="$STATE/windows.json"
+ENABLED="$STATE/enabled"
+TRACKER_PID="$STATE/tracker.pid"
+SOCKET="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/${HYPRLAND_INSTANCE_SIGNATURE:-none}/.socket2.sock"
+
+mkdir -p "$STATE"
+
+usage() {
+  cat <<EOF
+Usage: session-restore [track|on|off|toggle|status|now|save]
+
+  track    Follow window events; reopen the last session at startup
+  on/off   Enable/disable auto reopen (default: on)
+  toggle   Flip the option
+  status   Show option, tracker and saved-window state
+  now      Reopen the saved windows immediately
+  save     Save the currently open windows right now
+EOF
+}
+
+is_enabled() { [[ ! -f $ENABLED || $(<"$ENABLED") != 0 ]]; }
+
+excluded_class() {
+  case "$1" in
+  org.omarchy.screensaver) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+snapshot() {
+  local clients entries="[]" pid class ws cmd cwd tmp
+  clients=$(hyprctl clients -j 2>/dev/null) || return 0
+  while IFS=$'\t' read -r pid class ws; do
+    [[ -n ${class:-} && -r /proc/${pid:-}/cmdline ]] || continue
+    cmd=$(tr '\0' '\n' < "/proc/$pid/cmdline" |
+      jq -R -s 'split("\n") | map(select(length > 0))') || continue
+    [[ $(jq 'length' <<<"$cmd") -gt 0 ]] || continue
+    # Prefer $PWD from the process environment: foot (and friends) chdir to /,
+    # while opencode scopes its sessions to the inherited PWD. Fall back to the
+    # real cwd for everything else.
+    cwd=$(tr '\0' '\n' <"/proc/$pid/environ" 2>/dev/null | sed -n 's/^PWD=//p' | head -n1) || cwd=""
+    [[ $cwd == /* && -d $cwd ]] || cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null) || cwd=""
+    [[ $cwd == /* && -d $cwd ]] || cwd=""
+    entries=$(jq -c --arg class "$class" --arg ws "$ws" --arg cwd "$cwd" --argjson cmd "$cmd" \
+      '. + [{class: $class, workspace: $ws, cwd: $cwd, cmd: $cmd}]' <<<"$entries")
+  done < <(jq -r '.[]
+    | select(.mapped == true)
+    | select((.class | length) > 0)
+    | select(.class != "org.omarchy.screensaver")
+    | [.pid, .class, (.workspace.name // "1")] | @tsv' <<<"$clients")
+  tmp="$WINDOWS.tmp.$$"
+  printf '%s\n' "$entries" >"$tmp" && mv -f "$tmp" "$WINDOWS"
+}
+
+# A saved agent window comes back on the conversation that was open when the
+# machine went down (opencode -c) instead of a fresh session. A --prompt is
+# dropped so a reboot can never re-fire it unattended.
+restore_opencode_cmd() {
+  local -n _cmd=$1
+  local i j a has=0 sub=0
+  for i in "${!_cmd[@]}"; do
+    if [[ ${_cmd[i]} == --prompt ]]; then
+      _cmd=("${_cmd[@]:0:i}" "${_cmd[@]:i + 2}")
+      break
+    fi
+  done
+  for a in "${_cmd[@]}"; do
+    case $a in
+    -c | --continue | -s | --session) has=1 ;;
+    esac
+  done
+  ((has)) && return 0
+  for i in "${!_cmd[@]}"; do
+    [[ ${_cmd[i]} == opencode || ${_cmd[i]} == */opencode ]] || continue
+    for ((j = i + 1; j < ${#_cmd[@]}; j++)); do
+      [[ ${_cmd[j]} == -* ]] && continue
+      return 0 # a non-flag after opencode is a subcommand (run, session, ...)
+    done
+    _cmd=("${_cmd[@]:0:i + 1}" "-c" "${_cmd[@]:i + 1}")
+    return 0
+  done
+}
+
+restore() {
+  [[ -f $WINDOWS ]] || return 0
+  local open_classes entry class ws cwd key
+  local -A seen=()
+  mapfile -t open_classes < <(hyprctl clients -j 2>/dev/null |
+    jq -r '[.[] | select(.mapped == true) | .class] | unique | .[]')
+  while IFS= read -r entry; do
+    class=$(jq -r '.class' <<<"$entry")
+    ws=$(jq -r '.workspace' <<<"$entry")
+    cwd=$(jq -r '.cwd // empty' <<<"$entry")
+    [[ -n $class ]] || continue
+    excluded_class "$class" && continue
+    if printf '%s\n' "${open_classes[@]}" | grep -qxF "$class"; then continue; fi
+    local cmd=()
+    mapfile -t cmd < <(jq -r '.cmd[]' <<<"$entry")
+    ((${#cmd[@]} > 0)) || continue
+    restore_opencode_cmd cmd
+    key="${cmd[*]} $cwd"
+    [[ -n ${seen[$key]+x} ]] && continue
+    seen[$key]=1
+    (
+      if [[ -n $cwd && -d $cwd ]]; then cd "$cwd" || :; fi
+      exec setsid "${cmd[@]}" >/dev/null 2>&1
+    ) &
+    (
+      for _ in $(seq 1 20); do
+        sleep 0.5
+        if hyprctl clients -j 2>/dev/null |
+          jq -e --arg c "$class" 'any(.[]; .class == $c and .mapped == true)' >/dev/null; then
+          hyprctl dispatch "hl.dsp.window.move({ workspace = [[$ws]], window = [[class:^$class$]] })" >/dev/null 2>&1
+          break
+        fi
+      done
+    ) &
+  done < <(jq -c '.[]' "$WINDOWS")
+}
+
+track() {
+  if [[ -f $TRACKER_PID ]] && kill -0 "$(<"$TRACKER_PID")" 2>/dev/null; then
+    echo "session-restore tracker already running" >&2
+    exit 0
+  fi
+  echo $$ >"$TRACKER_PID"
+  SOCAT_PID=""
+  trap '[[ -n ${SOCAT_PID:-} ]] && kill "$SOCAT_PID" 2>/dev/null; rm -f "$TRACKER_PID"' EXIT
+  trap 'exit 0' TERM INT HUP
+
+  local marker="$STATE/restored.${HYPRLAND_INSTANCE_SIGNATURE:-none}"
+  if [[ ! -f $marker ]]; then
+    is_enabled && restore
+    : >"$marker"
+  fi
+
+  [[ -S $SOCKET ]] || {
+    echo "session-restore: no Hyprland event socket at $SOCKET" >&2
+    exit 1
+  }
+
+  coproc SR { exec socat -U - "UNIX-CONNECT:$SOCKET"; }
+  SOCAT_PID=$SR_PID
+
+  # Snapshots are debounced: the close-all in omarchy-system-reboot only
+  # queues, and Hyprland dies before the flush, so the pre-shutdown state is
+  # what the next boot reopens. A window the user closes normally is saved
+  # ~3s after the last event.
+  local line rc pending=0
+  while true; do
+    rc=0
+    read -r -t 3 line <&"${SR[0]}" || rc=$?
+    if ((rc == 0)); then
+      case "${line%%>>*}" in
+      openwindow | closewindow | movewindow | movewindowv2 | moveworkspacev2 | renameworkspace)
+        pending=1
+        ;;
+      esac
+    elif ((rc > 128)); then # timeout
+      if ((pending)); then
+        pending=0
+        snapshot
+      fi
+    else # Hyprland closed the socket: keep the last snapshot as-is
+      break
+    fi
+  done
+}
+
+status() {
+  local saved=0 running="not running"
+  [[ -f $WINDOWS ]] && saved=$(jq 'length' "$WINDOWS" 2>/dev/null || echo 0)
+  if [[ -f $TRACKER_PID ]] && kill -0 "$(<"$TRACKER_PID")" 2>/dev/null; then
+    running="running (pid $(<"$TRACKER_PID"))"
+  fi
+  echo "session-restore: $(is_enabled && echo on || echo off)"
+  echo "tracker: $running"
+  echo "saved windows: $saved"
+}
+
+command="${1:-status}"
+case "$command" in
+track) track ;;
+on)
+  echo 1 >"$ENABLED"
+  status
+  ;;
+off)
+  echo 0 >"$ENABLED"
+  status
+  ;;
+toggle)
+  if is_enabled; then echo 0 >"$ENABLED"; else echo 1 >"$ENABLED"; fi
+  status
+  ;;
+status) status ;;
+now)
+  restore
+  status
+  ;;
+save)
+  snapshot
+  status
+  ;;
+-h | --help | help) usage ;;
+*)
+  usage >&2
+  exit 1
+  ;;
+esac

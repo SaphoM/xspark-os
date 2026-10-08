@@ -19,6 +19,9 @@ mac-mode/
   scripts/                   install/toggle/backup/restore + mac gestures (app expose, ...)
   theme/                     Color themes (mac-light, mac-dark, xspark-branded)
 bin/omarchy-menu             CLI shim for the menu (toggle/summon/close/refresh), resolves to the active menu plugin
+bin/session-restore          Reopen windows after reboot/power loss; snapshots cwd + commands, resumes the agent session
+bin/xspark-system-reboot     Apple-menu reboot: save session state, checkpoint opencode, then omarchy-system-reboot
+bin/xspark-system-shutdown   Same for shutdown, then omarchy-system-shutdown
 ```
 
 ## Install
@@ -40,9 +43,15 @@ bin/omarchy-menu             CLI shim for the menu (toggle/summon/close/refresh)
    mac-mode/scripts/install.sh
    ```
 
-5. Add the CLI shim to your PATH (or copy to `~/.local/bin/omarchy-menu`).
+5. Add the CLI shims to your PATH (or copy `bin/omarchy-menu`, `bin/session-restore`, `bin/xspark-system-reboot`, `bin/xspark-system-shutdown` to `~/.local/bin/`).
 
 6. Restart the shell: `/usr/share/omarchy/bin/omarchy-restart-shell`.
+
+## Session restore & reboot
+
+- `session-restore track` (started from `~/.config/hypr/autostart.lua`) snapshots every open window — class, workspace, cwd and full argv — and reopens them after a restart, hibernate, power cut or reboot. Snapshots are debounced (~3s after the last window event) so the close-all in a graceful reboot can't wipe the saved state before Hyprland exits.
+- Each window is reopened in its original cwd. The agent window (`org.omarchy.agent`) is no longer excluded: it relaunches with `opencode --auto -c`, which resumes the most recent session for that directory, so the last conversation is still there after the machine dies. A saved `--prompt` is stripped so a reboot can never re-fire an old prompt unattended.
+- The Apple menu's **Restart…** / **Shut Down…** run `xspark-system-reboot` / `xspark-system-shutdown`: they take a synchronous `session-restore save` and a best-effort `wal_checkpoint(PASSIVE)` on `opencode.db` (so recent messages survive a power cut), then hand off to the stock `omarchy-system-reboot` / `omarchy-system-shutdown` for the graceful window close.
 
 ## Notes
 
