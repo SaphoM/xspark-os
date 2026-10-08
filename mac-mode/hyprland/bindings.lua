@@ -53,6 +53,7 @@ o.bind("CTRL + DOWN", "App Exposé", "omarchy-mac-app-expose")
 o.bind("SUPER + SHIFT + 3", "Full Screenshot", "omarchy-capture-screenshot")
 o.bind("SUPER + SHIFT + 4", "Area Screenshot", "omarchy-capture-region")
 o.bind("SUPER + SHIFT + 5", "Screenshot UI", "omarchy-menu toggle capture")
+o.bind("SUPER + SHIFT + W", "Capture Window", "omarchy-mac-capture-window")
 
 -- ============================================================
 -- LOCK (Cmd+Shift+Ctrl+Q style stays on SUPER+CTRL+L)

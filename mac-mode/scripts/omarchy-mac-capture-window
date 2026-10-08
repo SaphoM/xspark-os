@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# omarchy:summary=Capture the focused window (macOS Cmd+Shift+4+Space)
+# omarchy:group=capture
+# omarchy:examples=omarchy-mac-capture-window
+
+# Saves a PNG of the focused window only, copies it to the clipboard, and
+# notifies like the OS screenshot. The default full/area screenshot functions
+# (Super+Shift+3/4/5) are left untouched.
+
+[[ -f ~/.config/user-dirs.dirs ]] && source ~/.config/user-dirs.dirs
+OUTPUT_DIR="${OMARCHY_SCREENSHOT_DIR:-${XDG_PICTURES_DIR:-$HOME/Pictures}}"
+mkdir -p "$OUTPUT_DIR"
+
+GEO=$(hyprctl activewindow -j | jq -r 'select((.mapped != false) and (.hidden != true)) | "\(.at | join(",")) \(.size[0])x\(.size[1])"' 2>/dev/null)
+if [[ -z $GEO ]]; then
+  omarchy osd -m "No window to capture" -d 1200 >/dev/null 2>&1 || true
+  exit 1
+fi
+
+FILENAME="window-$(date +'%Y-%m-%d_%H-%M-%S').png"
+FILEPATH="$OUTPUT_DIR/$FILENAME"
+TMP=$(mktemp --suffix=.png)
+
+if grim -g "$GEO" - >"$TMP"; then
+  mv -f "$TMP" "$FILEPATH"
+  wl-copy --type image/png <"$FILEPATH"
+  omarchy-notification-send "Window screenshot saved" "$FILEPATH" --image "$FILEPATH" || true
+  echo "$FILEPATH"
+else
+  rm -f "$TMP"
+  exit 1
+fi
