@@ -125,10 +125,7 @@ Item {
       if (!cls) return false
       return cls.toLowerCase().indexOf(String(root.appFilter).toLowerCase()) >= 0
     }
-    // Mission Control only shows the current desktop's windows; the strip
-    // above still lets you jump to any other workspace.
-    var wsId = root.workspaceOf(h).id
-    return String(wsId) === String(root.activeWorkspaceId)
+    return true
   }
 
   function toplevelForHypr(h) {
