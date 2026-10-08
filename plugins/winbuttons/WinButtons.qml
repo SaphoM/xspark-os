@@ -29,7 +29,7 @@ Item {
   Process {
     id: watch
     running: true
-    command: ["python3", root.watchScript, "0.1"]
+    command: ["python3", root.watchScript, "0.06"]
     stdout: SplitParser {
       onRead: function(line) { root.onSnapshot(line) }
     }
@@ -50,45 +50,99 @@ Item {
 
     var mons = ({})
     var active = ({})
+    var activeSpecial = ({})
     for (var i = 0; i < snap.monitors.length; i++) {
       var mon = snap.monitors[i]
       mons[mon.id] = mon
       if (mon.activeWorkspace) active[mon.id] = mon.activeWorkspace.id
+      if (mon.specialWorkspace) activeSpecial[mon.id] = mon.specialWorkspace.id
+    }
+
+    var cursor = snap.cursor || ({ x: -99999, y: -99999 })
+    var cursorX = Number(cursor.x)
+    var cursorY = Number(cursor.y)
+
+    var wins = []
+    var holders = []
+    for (var j = 0; j < snap.clients.length; j++) {
+      var client = snap.clients[j]
+      if (!client || !client.address) continue
+      if (client.mapped === false || client.hidden === true || client.visible === false) continue
+      if (!mons[client.monitor]) continue
+      var ws = client.workspace || ({})
+      var wsName = String(ws.name || "")
+      if (wsName.length === 0) continue
+      var isActive = active[client.monitor] !== undefined
+        && active[client.monitor] === ws.id
+      var isActiveSpecial = activeSpecial[client.monitor] !== undefined
+        && activeSpecial[client.monitor] === ws.id
+      if (!isActive && !isActiveSpecial) continue
+      var at = client.at || [0, 0]
+      var size = client.size || [0, 0]
+      var win = {
+        addr: client.address,
+        mon: client.monitor,
+        x: Number(at[0]),
+        y: Number(at[1]),
+        w: Number(size[0]),
+        h: Number(size[1]),
+        float: client.floating === true,
+        fs: Number(client.fullscreen || 0),
+        idx: j
+      }
+      wins.push(win)
+      if (isActive && wsName.indexOf("special:") !== 0 && win.fs < 2) {
+        holders.push(win)
+      }
     }
 
     var next = ({})
     var set = ({})
     var order = []
-    for (var j = 0; j < snap.clients.length; j++) {
-      var client = snap.clients[j]
-      if (!client || !client.address) continue
-      if (client.mapped === false || client.hidden === true || client.visible === false) continue
-      if (Number(client.fullscreen || 0) >= 2) continue
-      var ws = client.workspace || ({})
-      var wsName = String(ws.name || "")
-      if (wsName.length === 0 || wsName.indexOf("special:") === 0) continue
-      if (active[client.monitor] === undefined || active[client.monitor] !== ws.id) continue
-      var monitor = mons[client.monitor]
-      if (!monitor) continue
-
-      var at = client.at || [0, 0]
-      var size = client.size || [0, 0]
-      var edge = Number(at[0]) - Number(monitor.x) + Number(size[0])
-        - root.clusterInset - root.clusterW
-      var start = Number(at[0]) - Number(monitor.x) + root.clusterInset
-      next[client.address] = ({
+    for (var k = 0; k < holders.length; k++) {
+      var w = holders[k]
+      var monitor = mons[w.mon]
+      var cx = w.x + w.w - root.clusterInset - root.clusterW
+      if (cx < w.x + root.clusterInset) cx = w.x + root.clusterInset
+      var cy = w.y + root.clusterInset
+      var hovered = cursorX >= w.x && cursorX < w.x + w.w
+        && cursorY >= w.y
+        && cursorY < w.y + Math.max(w.h / 3, root.clusterInset + root.clusterH + 4)
+      var occluded = false
+      for (var m = 0; m < wins.length && !occluded; m++) {
+        var v = wins[m]
+        if (v.addr === w.addr || !root.above(v, w)) continue
+        if (cx < v.x + v.w && v.x < cx + root.clusterW
+          && cy < v.y + v.h && v.y < cy + root.clusterH) {
+          occluded = true
+          break
+        }
+        if (hovered && cursorX >= v.x && cursorX < v.x + v.w
+          && cursorY >= v.y && cursorY < v.y + v.h) {
+          occluded = true
+        }
+      }
+      next[w.addr] = ({
         mon: String(monitor.name),
-        fs: Number(client.fullscreen || 0),
-        left: edge >= start ? edge : start,
-        top: Number(at[1]) - Number(monitor.y) + root.clusterInset
+        fs: w.fs,
+        left: cx - Number(monitor.x),
+        top: cy - Number(monitor.y),
+        show: hovered && !occluded
       })
-      set[client.address] = true
-      order.push(client.address)
+      set[w.addr] = true
+      order.push(w.addr)
     }
 
     root.geom = next
     var merged = root.mergeAddresses(order, set)
     if (!root.sameList(root.addresses, merged)) root.addresses = merged
+  }
+
+  function above(v, w) {
+    var vf = v.float ? 1 : 0
+    var wf = w.float ? 1 : 0
+    if (vf !== wf) return vf > wf
+    return v.idx > w.idx
   }
 
   function mergeAddresses(order, set) {
@@ -167,6 +221,7 @@ Item {
         required property var modelData
 
         readonly property var g: root.geom[modelData] || null
+        readonly property bool show: !!g && g.show === true
         readonly property bool glyphs: hoverArea.containsMouse
           || dotMin.hovered || dotMax.hovered || dotClose.hovered
         readonly property color glyphColor: Util.alpha("#000000", 0.55)
@@ -178,6 +233,11 @@ Item {
         implicitWidth: root.clusterW
         implicitHeight: root.clusterH
         screen: root.screenForName(g ? g.mon : "")
+
+        mask: Region {
+          width: cluster.show ? root.clusterW : 0
+          height: cluster.show ? root.clusterH : 0
+        }
 
         anchors {
           top: true
@@ -201,6 +261,7 @@ Item {
         Row {
           anchors.centerIn: parent
           spacing: root.dotGap
+          opacity: cluster.show ? 1 : 0
 
           Rectangle {
             id: dotMin

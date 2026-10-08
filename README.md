@@ -59,6 +59,7 @@ bin/xspark-system-shutdown   Same for shutdown, then omarchy-system-shutdown
 - **Apps menu**: the platform injects `shell.appLibrary` only for first-party menu plugins. The cloned menu owned by a third-party id receives a null bridge (a platform gap), so `plugins/menu/Menu.qml` falls back to a private `AppLibrary` instance, and keeps the injected one when/if the shell supplies it.
 - **Hairline borders**: on HiDPI (scale 2) a 1px border renders as 2 device pixels, so the menu border is `0.5` logical px (1 device px). Hyprland `general:border_size` is integer-only, so windows use `1`.
 - **QML edits**: hot reload / `rescanPlugins` serve a stale compiled cache for keep-loaded plugins; do a full shell restart after editing `Menu.qml`.
+- **Plugin file edits**: copying into `~/.config/omarchy/plugins/` triggers an async hot reload; restarting the shell (`omarchy-restart-shell`) while that reload is in flight crashed quickshell twice on 2026-10-08 — pause ~1s between copying and restarting.
 
 ## License
 

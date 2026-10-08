@@ -39,7 +39,17 @@ def main():
             if started - refreshed >= MONITOR_TTL:
                 monitors = request("j/monitors").replace(b"\n", b"").replace(b"\r", b"")
                 refreshed = started
-            line = b'{"clients":' + clients + b',"monitors":' + monitors + b"}\n"
+            cursor = b'{"x":-99999,"y":-99999}'
+            try:
+                parts = request("cursorpos").strip().split(b",")
+                if len(parts) == 2:
+                    cursor = b'{"x":' + parts[0].strip() + b',"y":' + parts[1].strip() + b"}"
+            except Exception:
+                pass
+            line = (
+                b'{"clients":' + clients + b',"monitors":' + monitors
+                + b',"cursor":' + cursor + b"}\n"
+            )
         except Exception as exc:
             line = json.dumps({"error": str(exc)}).encode() + b"\n"
             sys.stdout.buffer.write(line)
