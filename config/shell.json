@@ -48,6 +48,9 @@
     },
     {
       "id": "xspark.overview"
+    },
+    {
+      "id": "xspark.winbuttons"
     }
   ],
   "disabledPlugins": [],

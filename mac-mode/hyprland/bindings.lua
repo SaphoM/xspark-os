@@ -32,6 +32,7 @@ o.bind("SUPER + GRAVE", "Cycle App Windows", "omarchy-mac-winops cycle")
 -- ============================================================
 
 o.bind("SUPER + M", "Minimize Window", "omarchy-mac-winops minimize")
+o.bind("SUPER + CTRL + M", "Maximize / Restore Window", "omarchy-mac-winops maximize")
 o.bind("SUPER + H", "Hide Application", "omarchy-mac-winops hide")
 o.bind("SUPER + ALT + H", "Hide Other Applications", "omarchy-mac-winops hide-others")
 o.bind("SUPER + ALT + M", "Minimize App Windows", "omarchy-mac-winops hide")

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# omarchy:summary=Mac-style window actions (minimize, hide, cycle, force quit)
-# omarchy:examples=omarchy-mac-winops <minimize|hide|hide-others|cycle|force-quit|restore>
+# omarchy:summary=Mac-style window actions (minimize, maximize, close, hide, cycle, force quit)
+# omarchy:examples=omarchy-mac-winops <minimize|maximize|close|hide|hide-others|cycle|force-quit|restore>
 #
 # Dispatch is sent in Omarchy's Lua form (`hl.dsp...`) because this Hyprland
 # build evaluates `hyprctl dispatch` arguments as Lua; raw dispatcher syntax
@@ -14,7 +14,7 @@ set -euo pipefail
 SCRATCH="special:minimized"
 
 usage() {
-  echo "Usage: $(basename "$0") <minimize|hide|hide-others|cycle|force-quit|restore>" >&2
+  echo "Usage: $(basename "$0") <minimize|maximize|close|hide|hide-others|cycle|force-quit|restore> [address]" >&2
   exit 1
 }
 
@@ -59,11 +59,34 @@ move_to_scratch() {
   lua_dispatch "hl.dsp.window.move({ workspace = \"$SCRATCH\", follow = false, window = \"address:$addr\" })"
 }
 
+# Address to act on: the second argument when given, else the focused window.
+target_client() {
+  local addr="${1:-}"
+  [[ -n $addr ]] || addr=$(active_client | jq -r '.address // empty')
+  printf '%s' "$addr"
+}
+
 cmd_minimize() {
   local addr
-  addr=$(active_client | jq -r '.address // empty')
+  addr=$(target_client "${2:-}")
   [[ -n $addr ]] || exit 0
   move_to_scratch "$addr"
+}
+
+# Expand the window to fill the screen; a second press returns it to its
+# previous size (Hyprland's maximized mode is a toggle).
+cmd_maximize() {
+  local addr
+  addr=$(target_client "${2:-}")
+  [[ -n $addr ]] || exit 0
+  lua_dispatch "hl.dsp.window.fullscreen({ mode = \"maximized\", window = \"address:$addr\" })"
+}
+
+cmd_close() {
+  local addr
+  addr=$(target_client "${2:-}")
+  [[ -n $addr ]] || exit 0
+  lua_dispatch "hl.dsp.window.close({ window = \"address:$addr\" })"
 }
 
 cmd_hide() {
@@ -105,6 +128,8 @@ cmd_force_quit() {
 
 case "${1:-}" in
   minimize) cmd_minimize ;;
+  maximize) cmd_maximize ;;
+  close) cmd_close ;;
   hide) cmd_hide ;;
   hide-others) cmd_hide_others ;;
   cycle) cmd_cycle ;;

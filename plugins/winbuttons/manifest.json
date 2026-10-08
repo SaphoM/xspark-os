@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "xspark.winbuttons",
+  "name": "Window Controls",
+  "version": "1.0.0",
+  "author": "X Spark",
+  "description": "macOS-style minimize / maximize / close traffic lights floating at every window's top-right corner",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "WinButtons.qml"
+  },
+  "tags": [
+    "window",
+    "controls",
+    "quickshell",
+    "hyprland"
+  ]
+}

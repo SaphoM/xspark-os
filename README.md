@@ -13,6 +13,7 @@ plugins/
   macbar.controlcenter       Control Center widget
   menu                       Apple menu clone (menu plugin), anchored top-left under the Apple icon
   overview                   App Exposé (macOS-style card row of an app's windows, drag-free)
+  winbuttons                 Traffic-light window controls (minimize / maximize / close) on every window
 mac-mode/
   hyprland/                  Hyprland config (bindings, windows, gestures, looknfeel, input)
   shell/                     mac-mode shell layout + bar
@@ -29,7 +30,7 @@ bin/xspark-system-shutdown   Same for shutdown, then omarchy-system-shutdown
 1. Copy the plugin dirs into your Omarchy user plugins:
 
    ```sh
-   cp -r plugins/macbar plugins/macbar.apple plugins/macbar.controlcenter plugins/menu plugins/overview \
+   cp -r plugins/macbar plugins/macbar.apple plugins/macbar.controlcenter plugins/menu plugins/overview plugins/winbuttons \
      ~/.config/omarchy/plugins/
    ```
 
