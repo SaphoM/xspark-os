@@ -1,0 +1,70 @@
+#!/bin/bash
+
+# omarchy:summary=Run the Omarchy screensaver with a matrix-first effect rotation
+# User override of /usr/share/omarchy/bin/omarchy-screensaver. The matrix
+# effect is the headliner: it always runs first, wins ~8 out of 10 sequences,
+# gets a full-length rain (45s) and keeps the stock 120fps animation speed.
+# Every other effect is picked at random with a short 240fps run, and every
+# sequence is always allowed to finish on its own before the next begins.
+
+screensaver_in_focus() {
+  hyprctl activewindow -j | jq -e '.class == "org.omarchy.screensaver"' >/dev/null 2>&1
+}
+
+exit_screensaver() {
+  hyprctl eval 'hl.config({ cursor = { invisible = false } })' &>/dev/null || hyprctl keyword cursor:invisible false &>/dev/null || true
+  pkill -x ttfx 2>/dev/null
+  pkill -f '[o]rg.omarchy.screensaver' 2>/dev/null
+  exit 0
+}
+
+# Exit the screensaver on signals and input from keyboard and mouse
+trap exit_screensaver SIGINT SIGTERM SIGHUP SIGQUIT
+
+printf '\033]11;rgb:00/00/00\007'  # Set background color to black
+
+hyprctl eval 'hl.config({ cursor = { invisible = true } })' &>/dev/null || hyprctl keyword cursor:invisible true &>/dev/null || true
+
+# Terminals allocate the pty at the default 80x24 and only resize it once the
+# compositor has told the window how big it is. ttfx measures the terminal once,
+# at startup, so starting it before the resize lands sizes an 80x24 canvas and
+# paints it into the corner of a fullscreen window.
+wait_for_terminal_resize() {
+  local deadline=$((SECONDS + 2))
+  while ((SECONDS < deadline)) && [[ $(stty size 2>/dev/null) == "24 80" ]]; do
+    sleep 0.02
+  done
+}
+
+wait_for_terminal_resize
+
+BRANDING="$HOME/.config/omarchy/branding/screensaver.txt"
+[[ -f $BRANDING ]] || BRANDING="${OMARCHY_PATH:-/usr/share/omarchy}/logo.txt"
+
+common=(
+  --canvas-width 0 --canvas-height 0 --reuse-canvas
+  --anchor-canvas c --anchor-text c --no-eol --no-restore-cursor
+)
+
+first=1
+while true; do
+  if (( first == 1 || RANDOM % 10 < 8 )); then
+    ttfx -i "$BRANDING" --frame-rate 120 "${common[@]}" \
+      matrix --rain-time 45 &
+  else
+    ttfx -i "$BRANDING" --frame-rate 240 "${common[@]}" \
+      -R --exclude-effects matrix &
+  fi
+  first=0
+  ttfx_pid=$!
+
+  # Wait for the effect to finish on its own so every sequence runs full;
+  # only keyboard input or losing focus ends the screensaver early.
+  while kill -0 "$ttfx_pid" 2>/dev/null; do
+    if read -n1 -t 1 || ! screensaver_in_focus; then
+      exit_screensaver
+    fi
+  done
+  wait "$ttfx_pid" 2>/dev/null || true
+  sleep 0.2
+done
