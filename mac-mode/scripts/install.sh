@@ -7,6 +7,8 @@ set -euo pipefail
 
 OMARCHY_MAC_DIR="$HOME/.config/omarchy-mac"
 SCRIPTS_DIR="$OMARCHY_MAC_DIR/scripts"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_SRC="$(cd "$SCRIPT_DIR/../.." && pwd)/config"
 
 # Colors
 RED='\033[0;31m'
@@ -152,6 +154,41 @@ set_default_theme() {
   omarchy-theme-set mac-dark 2>/dev/null || warn "Could not set theme (omarchy-theme-set not found)"
 }
 
+install_window_controls() {
+  log "Removing toolkit-native window controls (xspark.winbuttons provides them)..."
+
+  # GTK3/GTK4: hide titlebar buttons and blank the decoration layout
+  for ver in 3.0 4.0; do
+    local dst_dir="$HOME/.config/gtk-$ver"
+    mkdir -p "$dst_dir"
+    for f in gtk.css settings.ini; do
+      if [[ -f "$dst_dir/$f" && ! -f "$dst_dir/$f.pre-xspark" ]]; then
+        cp "$dst_dir/$f" "$dst_dir/$f.pre-xspark"
+      fi
+      cp "$CONFIG_SRC/gtk-$ver/$f" "$dst_dir/$f"
+    done
+    success "GTK $ver config installed"
+  done
+
+  # Chromium: request server-side decoration (border only, no client buttons)
+  local cf="$HOME/.config/chromium-flags.conf"
+  mkdir -p "$(dirname "$cf")"
+  touch "$cf"
+  if ! grep -q -- "--disable-features=WaylandWindowDecorations" "$cf"; then
+    printf '%s\n' "--disable-features=WaylandWindowDecorations" >> "$cf"
+    success "Chromium flags updated"
+  else
+    log "Chromium flags already updated"
+  fi
+
+  # GTK apps read the GNOME button-layout for headerbar controls
+  if command -v gsettings >/dev/null 2>&1; then
+    gsettings set org.gnome.desktop.wm.preferences button-layout '' 2>/dev/null \
+      && success "button-layout cleared" \
+      || warn "Could not set button-layout"
+  fi
+}
+
 create_desktop_entries() {
   log "Creating X Spark application entries..."
 
@@ -244,6 +281,7 @@ main() {
   install_hyprland_config
   install_shell_config
   set_default_theme
+  install_window_controls
   create_desktop_entries
   add_to_path
   validate_install

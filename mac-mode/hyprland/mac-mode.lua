@@ -27,6 +27,12 @@ _G.o = _G.o or require("default.hypr.helpers")
 -- CLI in /usr/share/omarchy/bin.
 _G.hl.env("PATH", os.getenv("HOME") .. "/.local/bin:" .. (os.getenv("PATH") or ""))
 
+-- Strip toolkit-native window-control buttons; the xspark.winbuttons plugin
+-- draws the macOS traffic lights instead. GTK apps are handled via
+-- ~/.config/gtk-3.0|gtk-4.0/{gtk.css,settings.ini}; Chromium via
+-- ~/.config/chromium-flags.conf (all installed by install.sh).
+_G.hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
+
 -- Reload Mac Mode modules on every Hyprland config reload so edits land
 -- without restarting the session.
 local modules = {
