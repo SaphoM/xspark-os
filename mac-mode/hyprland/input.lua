@@ -28,7 +28,10 @@ end
 local vconsole = read_vconsole()
 local kb_layout = vconsole.XKBLAYOUT or "gb"
 local kb_variant = vconsole.XKBVARIANT or ""
-local kb_options = "compose:caps,shift:both_capslock_cancel"
+-- shift:both_capslock_cancel puts <LFSH> into both Shift and Lock modifier
+-- maps; xkbcomp then logs "Key <LFSH> added to map for multiple modifiers" on
+-- every keymap compile. Dropped for compose:caps only.
+local kb_options = "compose:caps"
 
 -- Mac keyboard specific: Cmd=Super, Option=Alt, Control=Control
 -- The Apple SPI keyboard sends proper keycodes
