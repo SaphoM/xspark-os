@@ -14,7 +14,7 @@ o.window("kitty", { float = true, size = { 800, 600 }, center = true })
 o.window("Alacritty", { float = true, size = { 800, 600 }, center = true })
 
 -- Browsers: float, centered, large
-o.window("firefox", { float = true, size = { "1200", "800" }, center = true })
+o.window("firefox", { float = true, size = { "1200", "800" }, center = true, decorate = false })
 o.window("Google-chrome", { float = true, size = { "1200", "800" }, center = true })
 o.window("google-chrome", { float = true, size = { "1200", "800" }, center = true })
 o.window("Brave-browser", { float = true, size = { "1200", "800" }, center = true })
@@ -38,11 +38,21 @@ o.window("spotify", { float = true, size = { 1000, 700 }, center = true })
 o.window("vlc", { float = true, center = true })
 o.window("mpv", { float = true, center = true })
 
--- Communication: float, centered
-o.window("discord", { float = true, size = { 1000, 700 }, center = true })
-o.window("Slack", { float = true, size = { 1000, 700 }, center = true })
-o.window("signal", { float = true, size = { 900, 600 }, center = true })
+-- Communication: float, centered (no default decorations - use winbuttons)
+o.window("discord", { float = true, size = { 1000, 700 }, center = true, decorate = false })
+o.window("Slack", { float = true, size = { 1000, 700 }, center = true, decorate = false })
+o.window("signal", { float = true, size = { 900, 600 }, center = true, decorate = false })
+
+-- Chromium and browsers: float, centered (no default decorations - use winbuttons)
+o.window("chromium", { float = true, size = { "1200", "800" }, center = true, decorate = false })
+o.window("Google-chrome", { float = true, size = { "1200", "800" }, center = true, decorate = false })
+o.window("google-chrome", { float = true, size = { "1200", "800" }, center = true, decorate = false })
+o.window("Brave-browser", { float = true, size = { "1200", "800" }, center = true, decorate = false })
+o.window({ tag = "chromium-based-browser" }, { float = true, size = { "1200", "800" }, center = true, decorate = false })
 
 -- Utilities: float, centered
 o.window("gnome-calculator", { float = true, center = true, size = { 400, 500 } })
 o.window("org.gnome.Calculator", { float = true, center = true, size = { 400, 500 } })
+
+-- Telegram: float, centered (no default decorations - use winbuttons)
+o.window("telegramdesktop", { float = true, center = true, decorate = false })
