@@ -12,6 +12,8 @@ SOCKET = os.path.join(
     ".socket.sock",
 )
 MONITOR_TTL = 2.0
+FAST_INTERVAL = 0.016
+FAST_WINDOW = 0.35
 
 
 def request(query):
@@ -28,16 +30,31 @@ def request(query):
     return b"".join(chunks)
 
 
+def geometry_of(clients):
+    return tuple(sorted(
+        (
+            client.get("address"),
+            tuple(client.get("at") or ()),
+            tuple(client.get("size") or ()),
+        )
+        for client in clients
+    ))
+
+
 def main():
     interval = float(sys.argv[1]) if len(sys.argv) > 1 else 0.12
     monitors = b"[]"
     refreshed = 0.0
+    previous = None
+    fast_until = 0.0
     while True:
         started = time.monotonic()
         try:
-            clients = request("j/clients").replace(b"\n", b"").replace(b"\r", b"")
+            clients = json.loads(request("j/clients"))
             if started - refreshed >= MONITOR_TTL:
-                monitors = request("j/monitors").replace(b"\n", b"").replace(b"\r", b"")
+                monitors = json.dumps(
+                    json.loads(request("j/monitors")), separators=(",", ":")
+                ).encode()
                 refreshed = started
             cursor = b'{"x":-99999,"y":-99999}'
             try:
@@ -46,8 +63,14 @@ def main():
                     cursor = b'{"x":' + parts[0].strip() + b',"y":' + parts[1].strip() + b"}"
             except Exception:
                 pass
+            geometry = geometry_of(clients)
+            if previous is not None and geometry != previous:
+                fast_until = started + FAST_WINDOW
+            previous = geometry
             line = (
-                b'{"clients":' + clients + b',"monitors":' + monitors
+                b'{"clients":'
+                + json.dumps(clients, separators=(",", ":")).encode()
+                + b',"monitors":' + monitors
                 + b',"cursor":' + cursor + b"}\n"
             )
         except Exception as exc:
@@ -58,7 +81,8 @@ def main():
             continue
         sys.stdout.buffer.write(line)
         sys.stdout.buffer.flush()
-        time.sleep(max(0.0, interval - (time.monotonic() - started)))
+        pace = FAST_INTERVAL if time.monotonic() < fast_until else interval
+        time.sleep(max(0.0, pace - (time.monotonic() - started)))
 
 
 main()

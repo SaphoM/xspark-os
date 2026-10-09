@@ -29,7 +29,12 @@ Item {
   Process {
     id: watch
     running: true
-    command: ["python3", root.watchScript, "0.06"]
+    // A dead feed freezes every cluster at show:false, so the traffic lights
+    // vanish until snapshots flow again. Suspend/resume has been observed to
+    // SIGKILL the python process, so supervise it here: the sh loop outlives
+    // any single python death and respawns within a second.
+    command: ["sh", "-c",
+      "while :; do python3 '" + root.watchScript + "' 0.04 || sleep 1; done"]
     stdout: SplitParser {
       onRead: function(line) { root.onSnapshot(line) }
     }
@@ -37,8 +42,16 @@ Item {
       onRead: function(line) { console.warn("xspark.winbuttons watch:", line) }
     }
     onExited: function(exitCode) {
-      console.warn("xspark.winbuttons watch exited", exitCode)
+      console.warn("xspark.winbuttons watch exited", exitCode + ", restarting")
+      watch.running = false
+      watchRestart.restart()
     }
+  }
+
+  Timer {
+    id: watchRestart
+    interval: 500
+    onTriggered: watch.running = true
   }
 
   function onSnapshot(line) {
