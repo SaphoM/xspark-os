@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Set every plugin manifest's version to the repo's commit count.
+#
+# With no argument it uses the current HEAD count (e.g. after a release).
+# The githooks/pre-commit hook passes "HEAD count + 1" so the commit being
+# created carries the version equal to its own number.
+set -euo pipefail
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+count="${1:-$(git -C "$repo_root" rev-list --count HEAD)}"
+
+cd "$repo_root"
+for manifest_path in plugins/*/manifest.json mac-mode/shell/manifest.json; do
+  [ -e "$manifest_path" ] || continue
+  python3 - "$manifest_path" "$count" <<'PY'
+import re, sys
+path, version = sys.argv[1], sys.argv[2]
+text = open(path).read()
+new, n = re.subn(
+    r'("version"\s*:\s*")[^"]*(")',
+    lambda m: m.group(1) + version + m.group(2),
+    text,
+    count=1,
+)
+if n == 0:
+    # No version field yet: keep the rest of the file byte-for-byte intact.
+    new = re.sub(r'{', '{\n  "version": "%s",' % version, text, count=1)
+if new != text:
+    open(path, "w").write(new)
+PY
+done
+echo "plugin versions set to $count (commit count)"

@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "xspark.agentnotes",
   "name": "Agent Notes",
-  "version": "1.0.0",
+  "version": "21",
   "author": "X Spark",
-  "description": "macOS-style invisible menu bar over the coding-agent window (org.omarchy.agent): shows the project title, a plus icon to add tasks, and a collapsible per-project task/notes list on a transparent background.",
+  "description": "macOS-style invisible menu bar over the coding-agent window (org.omarchy.agent): shows the session title and the working project name, a plus icon to add tasks, a collapsible per-project task/notes list, and can be dragged to any spot on the window.",
   "kinds": [
     "overlay"
   ],

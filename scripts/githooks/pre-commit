@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Bump plugin versions to the commit count of the commit about to be created,
+# then stage the manifests so the version travels with the commit.
+set -euo pipefail
+repo_root="$(git rev-parse --show-toplevel)"
+next=$(( $(git -C "$repo_root" rev-list --count HEAD) + 1 ))
+"$repo_root/bin/sync-version" "$next"
+git -C "$repo_root" add plugins/*/manifest.json mac-mode/shell/manifest.json

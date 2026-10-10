@@ -19,10 +19,35 @@ PanelWindow {
 
   // Persisted state (one JSON file per project / window title).
   readonly property string notesPath: host.notesPathFor(title)
+  // Base file name of the note file, e.g. "quickshell-diagnosis-4f8b".
+  readonly property string notesName: baseName()
+  // Project / client name: the folder the opencode session is working in
+  // (resolved from the opencode session db by watch.py). Falls back to the
+  // note file's base name when the session can't be matched.
+  readonly property string name:
+    (g && String(g.name || "").length > 0) ? String(g.name) : strip.notesName
   property var tasks: []
   property bool listOpen: false
   property bool editing: false
   property string draft: ""
+
+  // User-chosen placement, relative to the agent window's top-left corner.
+  property real offsetX: 0
+  property real offsetY: 0
+  property bool dragging: false
+
+  // The strip's current top-left in monitor coordinates (margins are a bind
+  // to these, so they are exactly the layer surface's position).
+  readonly property real originX: (g ? g.left : 0) + offsetX
+  readonly property real originY: (g ? g.top : 0) + offsetY
+
+  function baseName() {
+    var name = String(strip.notesPath || "")
+    var slash = name.lastIndexOf("/")
+    name = slash >= 0 ? name.slice(slash + 1) : name
+    if (name.length > 5 && name.slice(-5) === ".json") name = name.slice(0, -5)
+    return name
+  }
 
   readonly property int padX: 7
   readonly property int padY: 6
@@ -37,7 +62,7 @@ PanelWindow {
   screen: host.screenForName(g ? g.mon : "")
 
   anchors { top: true; left: true }
-  margins { top: g ? g.top : 0; left: g ? g.left : 0 }
+  margins { top: strip.originY; left: strip.originX }
 
   WlrLayershell.namespace: "xspark-agentnotes"
   WlrLayershell.layer: WlrLayer.Top
@@ -72,6 +97,10 @@ PanelWindow {
   function load(raw) {
     var data = null
     if (raw) { try { data = JSON.parse(raw) } catch (e) { data = null } }
+    if (data) {
+      if (typeof data.offsetX === "number") strip.offsetX = data.offsetX
+      if (typeof data.offsetY === "number") strip.offsetY = data.offsetY
+    }
     var list = (data && data.tasks && data.tasks.length !== undefined)
       ? data.tasks : []
     // Skip when unchanged so a just-written copy of our own data never
@@ -82,7 +111,13 @@ PanelWindow {
 
   function save() {
     if (strip.notesPath.length === 0) return
-    notesFile.setText(JSON.stringify({ title: strip.title, tasks: strip.tasks }, null, 2) + "\n")
+    notesFile.setText(JSON.stringify({
+      title: strip.title,
+      name: strip.name,
+      offsetX: strip.offsetX,
+      offsetY: strip.offsetY,
+      tasks: strip.tasks
+    }, null, 2) + "\n")
   }
 
   function newId() {
@@ -127,6 +162,20 @@ PanelWindow {
     strip.save()
   }
 
+  // Keep the strip fully inside the monitor it lives on.
+  function clampOffsets() {
+    var scr = strip.screen
+    if (!scr || !g) return
+    var maxX = Number(scr.width) - strip.implicitWidth
+    var maxY = Number(scr.height) - strip.implicitHeight
+    var ox = strip.offsetX
+    var oy = strip.offsetY
+    ox = Math.max(-g.left, Math.min(maxX - g.left, ox))
+    oy = Math.max(-g.top, Math.min(maxY - g.top, oy))
+    strip.offsetX = ox
+    strip.offsetY = oy
+  }
+
   // ------------------------------------------------------------------ visual
 
   // Transparent menu-bar scrim: almost invisible when collapsed, a touch more
@@ -139,6 +188,44 @@ PanelWindow {
     border.width: 1
     border.color: Util.alpha(Color.foreground, 0.16)
     Behavior on color { ColorAnimation { duration: 130 } }
+  }
+
+  // Drag the strip anywhere by the background / title. Deliberately declared
+  // before `inner` so the chevron, add pill and task rows (which sit above)
+  // keep their own click handling.
+  MouseArea {
+    id: dragArea
+    anchors.fill: parent
+    hoverEnabled: true
+    cursorShape: strip.dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+
+    property real lastX: 0
+    property real lastY: 0
+    property bool moved: false
+
+    onPressed: function(mouse) {
+      lastX = mouse.x
+      lastY = mouse.y
+      moved = false
+      strip.dragging = true
+    }
+    onPositionChanged: function(mouse) {
+      if (!pressed) return
+      var dx = mouse.x - lastX
+      var dy = mouse.y - lastY
+      lastX = mouse.x
+      lastY = mouse.y
+      if (dx === 0 && dy === 0) return
+      moved = true
+      strip.offsetX += dx
+      strip.offsetY += dy
+      strip.clampOffsets()
+    }
+    onReleased: function(mouse) {
+      strip.dragging = false
+      if (moved) strip.save()
+    }
+    onCanceled: strip.dragging = false
   }
 
   Column {
@@ -155,19 +242,48 @@ PanelWindow {
       width: inner.width
       height: strip.rowH
 
-      Text {
-        id: titleText
+      Row {
+        id: headRow
         anchors.left: parent.left
         anchors.right: chevBtn.left
         anchors.rightMargin: 6
         anchors.verticalCenter: parent.verticalCenter
-        text: strip.title.length > 0 ? strip.title : "Agent"
-        color: Color.foreground
-        font.family: Style.font.family
-        font.pixelSize: Style.font.bodySmall
-        font.weight: Font.DemiBold
-        opacity: 0.96
-        elide: Text.ElideRight
+        spacing: 5
+
+        Text {
+          id: titleText
+          anchors.verticalCenter: parent.verticalCenter
+          text: strip.title.length > 0 ? strip.title : "Agent"
+          width: Math.max(0, headRow.width - nameText.width - sepText.width - headRow.spacing * 2)
+          color: Color.foreground
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+          font.weight: Font.DemiBold
+          opacity: 0.96
+          elide: Text.ElideRight
+        }
+
+        Text {
+          id: sepText
+          anchors.verticalCenter: parent.verticalCenter
+          visible: nameText.text.length > 0
+          text: "|"
+          color: Util.alpha(Color.foreground, 0.4)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+        }
+
+        Text {
+          id: nameText
+          anchors.verticalCenter: parent.verticalCenter
+          text: strip.name
+          width: Math.min(strip.contentW * 0.45, implicitWidth)
+          clip: true
+          color: Util.alpha(Color.foreground, 0.6)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+          elide: Text.ElideMiddle
+        }
       }
 
       Item {

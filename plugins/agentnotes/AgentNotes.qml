@@ -25,7 +25,7 @@ Item {
   readonly property string agentClass: "org.omarchy.agent"
   readonly property string notesDir: Color.stateHome + "/omarchy/agentnotes"
 
-  // address -> { mon, fs, left, top, w, title }
+  // address -> { mon, fs, left, top, w, h, title, name }
   property var geom: ({})
   // Stable, resorted list of addresses so Variants keeps instances alive.
   property var addresses: []
@@ -107,7 +107,8 @@ Item {
         top: Number(at[1]) - Number(monitor.y),
         w: w,
         h: Number(size[1]),
-        title: String(client.title || "")
+        title: String(client.title || ""),
+        name: String(client.name || "")
       })
       set[client.address] = true
       order.push(client.address)

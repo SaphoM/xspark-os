@@ -14,6 +14,54 @@ SOCKET = os.path.join(
 MONITOR_TTL = 2.0
 FAST_INTERVAL = 0.016
 FAST_WINDOW = 0.35
+# Read-only lookup of the folder an opencode session is working in, so a strip
+# can show the project / client name (e.g. "Buhle Projects") next to the title.
+OPENCODE_DB = os.path.expanduser("~/.local/share/opencode/opencode.db")
+NAME_TTL = 60.0
+_name_cache = {}
+
+def session_name(title):
+    st = title[5:] if title.startswith("OC | ") else title
+    now = time.monotonic()
+    hit = _name_cache.get(st)
+    if hit is not None and now - hit[0] < NAME_TTL:
+        return hit[1]
+    name = ""
+    try:
+        import sqlite3
+        if os.path.exists(OPENCODE_DB):
+            conn = sqlite3.connect(
+                "file:%s?mode=ro" % OPENCODE_DB, uri=True, timeout=1.0
+            )
+            try:
+                row = conn.execute(
+                    "SELECT directory FROM session WHERE title = ? "
+                    "ORDER BY time_updated DESC LIMIT 1",
+                    (st,),
+                ).fetchone()
+                # Hyprland truncates long titles with "…": fall back to a
+                # prefix match so the name still resolves.
+                if row is None or not row[0]:
+                    short = st.rstrip("\u2026").rstrip()
+                    if short and short != st:
+                        row = conn.execute(
+                            "SELECT directory FROM session WHERE title LIKE ? "
+                            "AND title != ? ORDER BY time_updated DESC LIMIT 1",
+                            (short + "%", st),
+                        ).fetchone()
+                if row and row[0]:
+                    name = os.path.basename(os.path.normpath(row[0]))
+            finally:
+                conn.close()
+    except Exception:
+        name = ""
+    _name_cache[st] = (now, name)
+    return name
+
+def annotate_names(clients):
+    for client in clients:
+        if client.get("class") == "org.omarchy.agent":
+            client["name"] = session_name(client.get("title") or "")
 
 
 def request(query):
@@ -52,6 +100,7 @@ def main():
         started = time.monotonic()
         try:
             clients = json.loads(request("j/clients"))
+            annotate_names(clients)
             if started - refreshed >= MONITOR_TTL:
                 monitors = json.dumps(
                     json.loads(request("j/monitors")), separators=(",", ":")

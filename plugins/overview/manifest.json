@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "xspark.overview",
   "name": "App Exposé",
-  "version": "1.1.0",
+  "version": "21",
   "author": "X Spark",
   "description": "Mac-style App Exposé: horizontal card row of the current app's windows",
   "kinds": [

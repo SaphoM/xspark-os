@@ -14,13 +14,14 @@ plugins/
   menu                       Apple menu clone (menu plugin), anchored top-left under the Apple icon
   overview                   App Exposé (macOS-style card row of an app's windows, drag-free)
   winbuttons                 Traffic-light window controls (minimize / maximize / close) on every window
-  agentnotes                 Invisible menu bar over the agent window (org.omarchy.agent): project title, + add task, per-project task list
+  agentnotes                 Invisible, draggable menu bar over the agent window (org.omarchy.agent): session title + working project name, + add task, per-project task list
 mac-mode/
   hyprland/                  Hyprland config (bindings, windows, gestures, looknfeel, input)
   shell/                     mac-mode shell layout + bar
   scripts/                   install/toggle/backup/restore + mac gestures (app expose, ...)
   theme/                     Color themes (mac-light, mac-dark, xspark-branded)
 bin/omarchy-menu             CLI shim for the menu (toggle/summon/close/refresh), resolves to the active menu plugin
+bin/sync-version             Set every plugin manifest's version to the repo's commit count
 bin/session-restore          Reopen windows after reboot/power loss; snapshots cwd + commands, resumes the agent session
 bin/xspark-system-reboot     Apple-menu reboot: save session state, checkpoint opencode, then omarchy-system-reboot
 bin/xspark-system-shutdown   Same for shutdown, then omarchy-system-shutdown
@@ -48,6 +49,10 @@ bin/xspark-system-shutdown   Same for shutdown, then omarchy-system-shutdown
 5. Add the CLI shims to your PATH (or copy `bin/omarchy-menu`, `bin/session-restore`, `bin/xspark-system-reboot`, `bin/xspark-system-shutdown` to `~/.local/bin/`).
 
 6. Restart the shell: `/usr/share/omarchy/bin/omarchy-restart-shell`.
+
+## Versioning
+
+Plugin manifests use the repo's **commit count** as their version (`"version": "21"`), not semver. It is derived, not hand-maintained: `bin/sync-version` writes the count into every `manifest.json`, and the pre-commit hook (`scripts/githooks/pre-commit`, wired with `git config core.hooksPath scripts/githooks`) runs it with `HEAD + 1`, so each commit ships with a version equal to its own number. Fresh clone: the hook is already in-tree, just re-run `git config core.hooksPath scripts/githooks`.
 
 ## Session restore & reboot
 
