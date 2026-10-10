@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "xspark.macbar.controlcenter",
   "name": "MacBar Control Center",
-  "version": "21",
+  "version": "22",
   "description": "Control Center widget for Mac-style bar",
   "kinds": ["bar-widget"],
   "entryPoints": {

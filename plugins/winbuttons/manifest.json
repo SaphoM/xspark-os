@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "xspark.winbuttons",
   "name": "Window Controls",
-  "version": "21",
+  "version": "22",
   "author": "X Spark",
   "description": "macOS-style minimize / maximize / close traffic lights floating at every window's top-right corner",
   "kinds": [

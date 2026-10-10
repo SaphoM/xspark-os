@@ -31,6 +31,11 @@ PanelWindow {
   property bool editing: false
   property string draft: ""
 
+  // Inline task-text editing (Update in CRUD).
+  property bool taskEditing: false
+  property string taskEditId: ""
+  property string taskDraft: ""
+
   // User-chosen placement, relative to the agent window's top-left corner.
   property real offsetX: 0
   property real offsetY: 0
@@ -66,7 +71,7 @@ PanelWindow {
 
   WlrLayershell.namespace: "xspark-agentnotes"
   WlrLayershell.layer: WlrLayer.Top
-  WlrLayershell.keyboardFocus: strip.editing ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+  WlrLayershell.keyboardFocus: (strip.editing || strip.taskEditing) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
   implicitWidth: contentW + padX * 2
   implicitHeight: inner.implicitHeight + padY * 2
@@ -76,7 +81,10 @@ PanelWindow {
     height: strip.implicitHeight
   }
 
-  onListOpenChanged: chev.requestPaint()
+  onListOpenChanged: {
+    chev.requestPaint()
+    if (!listOpen) strip.cancelTaskEdit()
+  }
   onEditingChanged: {
     if (editing) Qt.callLater(function() { draftField.forceActiveFocus() })
   }
@@ -162,6 +170,47 @@ PanelWindow {
     strip.save()
   }
 
+  function taskById(id) {
+    for (var i = 0; i < strip.tasks.length; i++) {
+      if (String(strip.tasks[i].id) === String(id)) return strip.tasks[i]
+    }
+    return null
+  }
+
+  // --- Update: edit a task's text in place -------------------------------
+  function startTaskEdit(id) {
+    var t = strip.taskById(id)
+    if (!t) return
+    strip.cancelDraft()
+    strip.cancelTaskEdit()
+    strip.taskEditId = id
+    strip.taskDraft = t.text
+    strip.taskEditing = true
+    Qt.callLater(function() {
+      taskEditField.text = strip.taskDraft
+      taskEditField.forceActiveFocus()
+    })
+  }
+
+  function commitTaskEdit() {
+    var id = strip.taskEditId
+    if (id.length === 0) { strip.cancelTaskEdit(); return }
+    var text = strip.taskDraft.trim()
+    if (text.length === 0) { strip.removeTask(id); strip.cancelTaskEdit(); return }
+    strip.tasks = strip.tasks.map(function(t) {
+      if (String(t.id) !== String(id)) return t
+      return { id: t.id, text: text, done: t.done, collapsed: t.collapsed }
+    })
+    strip.save()
+    strip.cancelTaskEdit()
+  }
+
+  function cancelTaskEdit() {
+    strip.taskEditId = ""
+    strip.taskDraft = ""
+    strip.taskEditing = false
+  }
+
   // Keep the strip fully inside the monitor it lives on.
   function clampOffsets() {
     var scr = strip.screen
@@ -184,7 +233,7 @@ PanelWindow {
   Rectangle {
     anchors.fill: parent
     radius: 9
-    color: Util.alpha(Color.background, strip.editing || strip.listOpen ? 0.82 : 0.34)
+    color: Util.alpha(Color.background, (strip.editing || strip.taskEditing || strip.listOpen) ? 0.82 : 0.34)
     border.width: 1
     border.color: Util.alpha(Color.foreground, 0.16)
     Behavior on color { ColorAnimation { duration: 130 } }
@@ -378,6 +427,7 @@ PanelWindow {
           hoverEnabled: true
           cursorShape: Qt.PointingHandCursor
           onClicked: {
+            strip.cancelTaskEdit()
             strip.editing = true
             strip.draft = ""
             Qt.callLater(function() {
@@ -476,9 +526,11 @@ PanelWindow {
           delegate: Item {
             id: row
             width: listCol.width
-            height: Math.max(24, rowText.implicitHeight + 12)
+            height: row.editing ? 24 : Math.max(24, rowText.implicitHeight + 12)
 
             readonly property int zone: 26
+            readonly property bool editing:
+              strip.taskEditing && String(modelData.id) === String(strip.taskEditId)
 
             Rectangle {
               anchors.fill: parent
@@ -493,11 +545,11 @@ PanelWindow {
             MouseArea {
               id: rowMouse
               anchors.fill: parent
+              enabled: !row.editing
               hoverEnabled: true
               cursorShape: Qt.PointingHandCursor
               onClicked: function(mouse) {
                 if (mouse.x < row.zone) strip.toggleDone(modelData.id)
-                else if (mouse.x > row.width - row.zone) strip.removeTask(modelData.id)
                 else strip.toggleTask(modelData.id)
               }
             }
@@ -532,10 +584,11 @@ PanelWindow {
             Text {
               id: rowText
               anchors.left: parent.left
-              anchors.right: delGlyph.left
+              anchors.right: actions.left
               anchors.leftMargin: 25
-              anchors.rightMargin: 8
+              anchors.rightMargin: 6
               anchors.verticalCenter: parent.verticalCenter
+              visible: !row.editing
               text: modelData.text
               color: modelData.done
                 ? Util.alpha(Color.foreground, 0.45)
@@ -549,18 +602,134 @@ PanelWindow {
               Behavior on color { ColorAnimation { duration: 120 } }
             }
 
-            Text {
-              id: delGlyph
+            // Hover-revealed actions: edit (✎) then delete (×).
+            Item {
+              id: actions
               anchors.right: parent.right
-              anchors.rightMargin: 9
+              anchors.rightMargin: 4
               anchors.verticalCenter: parent.verticalCenter
-              opacity: rowMouse.containsMouse ? 1 : 0
-              text: "×"
-              color: Util.alpha(Color.foreground, 0.75)
-              font.family: Style.font.family
-              font.pixelSize: Style.font.title
-              font.bold: true
+              width: 42
+              height: row.height
+              opacity: (rowMouse.containsMouse || editHitMouse.containsMouse
+                || delHitMouse.containsMouse || row.editing) ? 1 : 0
+              visible: !row.editing
               Behavior on opacity { NumberAnimation { duration: 100 } }
+
+              Item {
+                id: editHit
+                anchors.right: delHit.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: 20
+                height: row.height
+
+                Text {
+                  anchors.centerIn: parent
+                  text: "✎"
+                  color: editHitMouse.containsMouse
+                    ? Color.accent
+                    : Util.alpha(Color.foreground, 0.75)
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                }
+
+                MouseArea {
+                  id: editHitMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: strip.startTaskEdit(modelData.id)
+                }
+              }
+
+              Item {
+                id: delHit
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                width: 20
+                height: row.height
+
+                Text {
+                  anchors.centerIn: parent
+                  text: "×"
+                  color: delHitMouse.containsMouse
+                    ? Util.alpha(Color.foreground, 1)
+                    : Util.alpha(Color.foreground, 0.75)
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.title
+                  font.bold: true
+                }
+
+                MouseArea {
+                  id: delHitMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: strip.removeTask(modelData.id)
+                }
+              }
+            }
+
+            // Inline editor for Update: replaces the row while editing.
+            Rectangle {
+              id: editBox
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.leftMargin: 24
+              anchors.verticalCenter: parent.verticalCenter
+              height: 23
+              radius: 6
+              visible: row.editing
+              z: 6
+              color: Util.alpha(Color.background, 0.85)
+              border.width: 1
+              border.color: Util.alpha(Color.accent, 0.75)
+
+              TextInput {
+                id: taskEditField
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 30
+                verticalAlignment: TextInput.AlignVCenter
+                color: Color.foreground
+                selectionColor: Color.accent
+                selectedTextColor: Color.background
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                clip: true
+                onTextEdited: strip.taskDraft = text
+                Keys.onPressed: function(event) {
+                  if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    strip.commitTaskEdit()
+                    event.accepted = true
+                  } else if (event.key === Qt.Key_Escape) {
+                    strip.cancelTaskEdit()
+                    event.accepted = true
+                  }
+                }
+              }
+
+              // save
+              Text {
+                anchors.right: parent.right
+                anchors.rightMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                text: "✓"
+                color: saveHit.containsMouse
+                  ? Color.accent
+                  : Util.alpha(Color.foreground, 0.85)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                font.bold: true
+
+                MouseArea {
+                  id: saveHit
+                  anchors.fill: parent
+                  anchors.margins: -6
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: strip.commitTaskEdit()
+                }
+              }
             }
           }
         }
