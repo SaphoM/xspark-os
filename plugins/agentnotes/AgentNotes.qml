@@ -108,7 +108,8 @@ Item {
         w: w,
         h: Number(size[1]),
         title: String(client.title || ""),
-        name: String(client.name || "")
+        name: String(client.name || ""),
+        occluded: root.occludedBy(client, snap.clients)
       })
       set[client.address] = true
       order.push(client.address)
@@ -142,6 +143,43 @@ Item {
     if (a.length !== b.length) return false
     for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
     return true
+  }
+
+  // Whether another visible window on the same monitor / workspace sits in
+  // front of (occludes) the given client rect. Hyprland's focusHistoryID is 0
+  // for the frontmost window and increases with depth, so a window with a
+  // smaller id is drawn above this one.
+  function occludedBy(client, clients) {
+    var at = client.at || [0, 0]
+    var size = client.size || [0, 0]
+    var ax = Number(at[0])
+    var ay = Number(at[1])
+    var aw = Number(size[0])
+    var ah = Number(size[1])
+    if (!(aw > 0) || !(ah > 0)) return false
+    var afhi = Number(client.focusHistoryID)
+    if (isNaN(afhi)) return false
+    var ws = client.workspace || ({})
+
+    for (var i = 0; i < clients.length; i++) {
+      var o = clients[i]
+      if (!o || !o.address || o.address === client.address) continue
+      if (o.mapped === false || o.hidden === true || o.visible === false) continue
+      if (o.monitor !== client.monitor) continue
+      var ows = o.workspace || ({})
+      if (ows.id !== ws.id) continue
+      var ofhi = Number(o.focusHistoryID)
+      if (!(ofhi < afhi)) continue
+      var oat = o.at || [0, 0]
+      var osz = o.size || [0, 0]
+      var ox = Number(oat[0])
+      var oy = Number(oat[1])
+      var ow = Number(osz[0])
+      var oh = Number(osz[1])
+      if (!(ow > 0) || !(oh > 0)) continue
+      if (ax < ox + ow && ox < ax + aw && ay < oy + oh && oy < ay + ah) return true
+    }
+    return false
   }
 
   function screenForName(name) {

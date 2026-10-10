@@ -16,6 +16,9 @@ PanelWindow {
   readonly property var g: host.geom[modelData] || null
   readonly property string title: g ? String(g.title || "").trim() : ""
   readonly property bool hasWindow: !!g && g.w > 0
+  // True when another window is stacked in front of the agent window. The
+  // strip then shares a lower layer so it sinks together with its window.
+  readonly property bool occluded: g ? Boolean(g.occluded) : false
 
   // Persisted state (one JSON file per project / window title).
   readonly property string notesPath: host.notesPathFor(title)
@@ -59,6 +62,9 @@ PanelWindow {
   readonly property int contentW: Math.min(Math.max(200, (g ? g.w : 240) - padX * 2), 440)
   readonly property int rowH: 24
   readonly property int maxListH: Math.max(60, Math.round((g ? g.h : 420) * 0.5))
+  // bottom-right show/hide button: size + bottom margin reserved below the list
+  readonly property int toggleSize: 20
+  readonly property int toggleGap: 6
 
   visible: hasWindow
   color: "transparent"
@@ -70,11 +76,14 @@ PanelWindow {
   margins { top: strip.originY; left: strip.originX }
 
   WlrLayershell.namespace: "xspark-agentnotes"
-  WlrLayershell.layer: WlrLayer.Top
+  // Ride in the same stacking plane as the agent window: above the desktop and
+  // over the window itself, but below any window stacked in front of it.
+  WlrLayershell.layer: strip.occluded ? WlrLayer.Bottom : WlrLayer.Top
   WlrLayershell.keyboardFocus: (strip.editing || strip.taskEditing) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
   implicitWidth: contentW + padX * 2
-  implicitHeight: inner.implicitHeight + padY * 2
+  implicitHeight:
+    inner.implicitHeight + padY * 2 + (listOpen ? toggleSize + toggleGap : 0)
 
   mask: Region {
     width: strip.implicitWidth
@@ -294,8 +303,7 @@ PanelWindow {
       Row {
         id: headRow
         anchors.left: parent.left
-        anchors.right: chevBtn.left
-        anchors.rightMargin: 6
+        anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         spacing: 5
 
@@ -332,48 +340,6 @@ PanelWindow {
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
           elide: Text.ElideMiddle
-        }
-      }
-
-      Item {
-        id: chevBtn
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        width: 20
-        height: 20
-
-        Canvas {
-          id: chev
-          anchors.centerIn: parent
-          width: 11
-          height: 7
-          onPaint: {
-            var c = getContext("2d")
-            c.clearRect(0, 0, width, height)
-            c.fillStyle = "#eeeeee"
-            c.beginPath()
-            if (strip.listOpen) {
-              c.moveTo(0, height)
-              c.lineTo(width / 2, 0)
-              c.lineTo(width, height)
-            } else {
-              c.moveTo(0, 0)
-              c.lineTo(width / 2, height)
-              c.lineTo(width, 0)
-            }
-            c.closePath()
-            c.fill()
-          }
-        }
-
-        MouseArea {
-          anchors.fill: parent
-          hoverEnabled: true
-          cursorShape: Qt.PointingHandCursor
-          onClicked: {
-            strip.listOpen = !strip.listOpen
-            if (strip.listOpen === false) strip.editing = false
-          }
         }
       }
     }
@@ -745,6 +711,62 @@ PanelWindow {
           topPadding: 4
           bottomPadding: 4
         }
+      }
+    }
+  }
+
+  // --- bottom-right show/hide toggle --------------------------------------
+  Item {
+    id: toggleBtn
+    visible: !strip.editing
+    anchors.right: parent.right
+    anchors.rightMargin: strip.padX
+    anchors.bottom: parent.bottom
+    anchors.bottomMargin: strip.toggleGap
+    width: strip.toggleSize
+    height: strip.toggleSize
+
+    Rectangle {
+      anchors.fill: parent
+      radius: height / 2
+      color: toggleMouse.containsMouse
+        ? Util.alpha(Color.foreground, 0.16)
+        : Util.alpha(Color.foreground, 0.08)
+    }
+
+    Canvas {
+      id: chev
+      anchors.centerIn: parent
+      width: 11
+      height: 7
+      z: 1
+      onPaint: {
+        var c = getContext("2d")
+        c.clearRect(0, 0, width, height)
+        c.fillStyle = "#ffffff"
+        c.beginPath()
+        if (strip.listOpen) {
+          c.moveTo(0, height)
+          c.lineTo(width / 2, 0)
+          c.lineTo(width, height)
+        } else {
+          c.moveTo(0, 0)
+          c.lineTo(width / 2, height)
+          c.lineTo(width, 0)
+        }
+        c.closePath()
+        c.fill()
+      }
+    }
+
+    MouseArea {
+      id: toggleMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: {
+        strip.listOpen = !strip.listOpen
+        if (strip.listOpen === false) strip.editing = false
       }
     }
   }
