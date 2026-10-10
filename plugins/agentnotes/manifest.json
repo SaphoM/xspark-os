@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "xspark.agentnotes",
+  "name": "Agent Notes",
+  "version": "1.0.0",
+  "author": "X Spark",
+  "description": "macOS-style invisible menu bar over the coding-agent window (org.omarchy.agent): shows the project title, a plus icon to add tasks, and a collapsible per-project task/notes list on a transparent background.",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "AgentNotes.qml"
+  },
+  "tags": [
+    "agent",
+    "notes",
+    "tasks",
+    "overlay",
+    "quickshell",
+    "hyprland"
+  ]
+}
