@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "xspark.macbar.apple",
   "name": "MacBar Apple Menu",
-  "version": "23",
+  "version": "24",
   "description": "Apple menu widget for Mac-style bar",
   "kinds": ["bar-widget"],
   "entryPoints": {

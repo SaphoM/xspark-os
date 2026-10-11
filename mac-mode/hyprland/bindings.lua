@@ -28,6 +28,13 @@ o.bind("SUPER + SHIFT + TAB", "App Switcher (prev)", "omarchy-mac-app-switcher p
 o.bind("SUPER + GRAVE", "Cycle App Windows", "omarchy-mac-winops cycle")
 
 -- ============================================================
+-- SPOTLIGHT / SEARCH (Option+Space)
+-- ============================================================
+
+-- Toggle the floating search box (xspark.spotlight overlay plugin).
+o.bind("ALT + SPACE", "Spotlight Search", "omarchy-shell shell toggle xspark.spotlight")
+
+-- ============================================================
 -- WINDOW MANAGEMENT
 -- ============================================================
 

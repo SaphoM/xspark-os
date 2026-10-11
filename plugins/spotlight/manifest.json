@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "xspark.spotlight",
+  "name": "Spotlight",
+  "version": "24",
+  "author": "X Spark",
+  "description": "macOS-style Spotlight search: a rounded search field that floats in the middle of the screen",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Spotlight.qml"
+  },
+  "tags": [
+    "spotlight",
+    "search",
+    "launcher",
+    "overlay",
+    "quickshell",
+    "hyprland"
+  ]
+}
