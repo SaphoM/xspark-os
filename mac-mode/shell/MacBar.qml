@@ -14,6 +14,7 @@ import qs.Commons
 import qs.Ui
 
 import "MacBarModel.js" as MacBarModel
+import "AgentTodoWidget.qml" as AgentTodoWidget
 
 Item {
   id: root
@@ -454,7 +455,7 @@ Item {
         }
       }
 
-      // CENTER SECTION: Clock (macOS style)
+      // CENTER SECTION: Activity title and ToDo list
       Item {
         id: centerSection
         Layout.fillHeight: true
@@ -465,19 +466,12 @@ Item {
           anchors.centerIn: parent
           spacing: Style.space(16)
 
-          // Date/Time
-          MacClock {
-            id: clockWidget
-            format: "HH:mm"
-            formatAlt: "EEEE, MMMM d"
-            foreground: root.barForeground
-            fontFamily: root.fontFamily
-            fontSize: Style.font.body
-            fontWeight: Font.Medium
-            onClicked: {
-              root.shell && root.shell.bar && root.shell.bar.togglePanelAt("right", 1)
-            }
-          }
+AgentTodoWidget {
+        id: agentTodoWidget
+        anchors.centerIn: parent
+        shell: root.shell
+        Layout.fillWidth: true
+      }
         }
       }
 

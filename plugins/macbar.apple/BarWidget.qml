@@ -1,9 +1,16 @@
 import QtQuick
+import Quickshell
+import qs.Commons
 import qs.Ui
 
 BarWidget {
   id: root
   moduleName: "xspark.macbar.apple"
+
+  Component.onCompleted: {
+    var uiFont = Quickshell.env("OMARCHY_UI_FONT")
+    Style.fontFamily = uiFont && uiFont.length > 0 ? uiFont : "SF Pro Text"
+  }
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight

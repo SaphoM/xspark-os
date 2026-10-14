@@ -16,17 +16,23 @@ FAST_INTERVAL = 0.016
 FAST_WINDOW = 0.35
 # Read-only lookup of the folder an opencode session is working in, so a strip
 # can show the project / client name (e.g. "Buhle Projects") next to the title.
+# The same lookup yields the session id, used to poll whether the agent's last
+# turn is still unfinished ("busy"): the strip auto-strikes its top task when
+# the turn completes.
 OPENCODE_DB = os.path.expanduser("~/.local/share/opencode/opencode.db")
-NAME_TTL = 60.0
-_name_cache = {}
+SID_TTL = 60.0
+BUSY_TTL = 0.8
+_session_cache = {}
+_busy_cache = {}
 
-def session_name(title):
+def resolve_session(title):
     st = title[5:] if title.startswith("OC | ") else title
     now = time.monotonic()
-    hit = _name_cache.get(st)
-    if hit is not None and now - hit[0] < NAME_TTL:
-        return hit[1]
-    name = ""
+    hit = _session_cache.get(st)
+    if hit is not None and now - hit[0] < SID_TTL:
+        return hit[1], hit[2]
+    sid = ""
+    directory = ""
     try:
         import sqlite3
         if os.path.exists(OPENCODE_DB):
@@ -35,33 +41,76 @@ def session_name(title):
             )
             try:
                 row = conn.execute(
-                    "SELECT directory FROM session WHERE title = ? "
+                    "SELECT id, directory FROM session WHERE title = ? "
                     "ORDER BY time_updated DESC LIMIT 1",
                     (st,),
                 ).fetchone()
                 # Hyprland truncates long titles with "…": fall back to a
                 # prefix match so the name still resolves.
                 if row is None or not row[0]:
-                    short = st.rstrip("\u2026").rstrip()
+                    short = st.rstrip("…").rstrip()
                     if short and short != st:
                         row = conn.execute(
-                            "SELECT directory FROM session WHERE title LIKE ? "
+                            "SELECT id, directory FROM session WHERE title LIKE ? "
                             "AND title != ? ORDER BY time_updated DESC LIMIT 1",
                             (short + "%", st),
                         ).fetchone()
-                if row and row[0]:
-                    name = os.path.basename(os.path.normpath(row[0]))
+                if row:
+                    sid = row[0] or ""
+                    directory = row[1] or ""
             finally:
                 conn.close()
     except Exception:
-        name = ""
-    _name_cache[st] = (now, name)
-    return name
+        sid = ""
+        directory = ""
+    _session_cache[st] = (now, sid, directory)
+    return sid, directory
+
+def session_name(title):
+    _, directory = resolve_session(title)
+    if not directory:
+        return ""
+    return os.path.basename(os.path.normpath(directory))
+
+def session_busy(sid):
+    # Busy while the newest message is a user prompt or an assistant reply
+    # without time.completed: the agent is mid-turn. Completed reply = idle.
+    now = time.monotonic()
+    hit = _busy_cache.get(sid)
+    if hit is not None and now - hit[0] < BUSY_TTL:
+        return hit[1]
+    busy = False
+    try:
+        import sqlite3
+        conn = sqlite3.connect(
+            "file:%s?mode=ro" % OPENCODE_DB, uri=True, timeout=1.0
+        )
+        try:
+            row = conn.execute(
+                "SELECT data FROM message WHERE session_id = ? "
+                "ORDER BY time_created DESC LIMIT 1",
+                (sid,),
+            ).fetchone()
+        finally:
+            conn.close()
+        if row and row[0]:
+            msg = json.loads(row[0])
+            role = msg.get("role")
+            completed = bool((msg.get("time") or {}).get("completed"))
+            busy = role == "user" or (role == "assistant" and not completed)
+    except Exception:
+        busy = False
+    _busy_cache[sid] = (now, busy)
+    return busy
 
 def annotate_names(clients):
     for client in clients:
         if client.get("class") == "org.omarchy.agent":
-            client["name"] = session_name(client.get("title") or "")
+            sid, directory = resolve_session(client.get("title") or "")
+            client["name"] = (
+                os.path.basename(os.path.normpath(directory)) if directory else ""
+            )
+            client["busy"] = bool(sid) and session_busy(sid)
 
 
 def request(query):

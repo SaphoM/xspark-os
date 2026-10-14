@@ -19,6 +19,9 @@ PanelWindow {
   // True when another window is stacked in front of the agent window. The
   // strip then shares a lower layer so it sinks together with its window.
   readonly property bool occluded: g ? Boolean(g.occluded) : false
+  // True while the matched opencode session's newest turn is unfinished.
+  readonly property bool busy: g ? Boolean(g.busy) : false
+  property bool busyPrev: false
 
   // Persisted state (one JSON file per project / window title).
   readonly property string notesPath: host.notesPathFor(title)
@@ -30,6 +33,12 @@ PanelWindow {
   readonly property string name:
     (g && String(g.name || "").length > 0) ? String(g.name) : strip.notesName
   property var tasks: []
+  // Completed / total, e.g. "1/10".
+  readonly property int doneCount: {
+    var n = 0
+    for (var i = 0; i < tasks.length; i++) if (tasks[i] && tasks[i].done) n++
+    return n
+  }
   property bool listOpen: false
   property bool editing: false
   property string draft: ""
@@ -93,6 +102,22 @@ PanelWindow {
   onListOpenChanged: {
     chev.requestPaint()
     if (!listOpen) strip.cancelTaskEdit()
+  }
+  // Turn-completed edge (busy -> idle): auto-strike the top pending task.
+  // The manual dot toggle stays, so the user can unstrike for refinement.
+  onBusyChanged: {
+    if (!hasWindow) {
+      busyPrev = false
+      return
+    }
+    if (busy) {
+      busyPrev = true
+      return
+    }
+    if (busyPrev) {
+      busyPrev = false
+      strip.strikeFirstPending()
+    }
   }
   onEditingChanged: {
     if (editing) Qt.callLater(function() { draftField.forceActiveFocus() })
@@ -165,10 +190,21 @@ PanelWindow {
 
   function toggleDone(id) {
     strip.tasks = strip.tasks.map(function(t) {
-      if (t.id !== id) return { id: t.id, text: t.text, done: !t.done, collapsed: t.collapsed }
-      return t
+      if (t.id !== id) return t
+      return { id: t.id, text: t.text, done: !t.done, collapsed: t.collapsed }
     })
     strip.save()
+  }
+
+  function strikeFirstPending() {
+    if (strip.editing || strip.taskEditing) return
+    for (var i = 0; i < strip.tasks.length; i++) {
+      if (strip.tasks[i].done) continue
+      var id = strip.tasks[i].id
+      console.log("xspark.agentnotes auto-strike:", strip.tasks[i].text)
+      strip.toggleDone(id)
+      return
+    }
   }
 
   function toggleTask(id) {
@@ -404,6 +440,36 @@ PanelWindow {
         }
       }
 
+      // --- Task counter: completed / total (e.g. 1/10), right-aligned ----
+      Row {
+        id: counterRow
+        visible: !strip.editing && strip.tasks.length > 0
+        anchors.right: parent.right
+        anchors.rightMargin: 24
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: 0
+
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          text: String(strip.doneCount)
+          color: strip.doneCount > 0
+            ? Color.accent
+            : Util.alpha(Color.foreground, 0.7)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+          font.weight: Font.DemiBold
+        }
+
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          text: "/" + strip.tasks.length
+          color: Util.alpha(Color.foreground, 0.55)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+          font.weight: Font.DemiBold
+        }
+      }
+
       Row {
         id: inputRow
         visible: strip.editing
@@ -508,17 +574,17 @@ PanelWindow {
               border.color: Util.alpha(Color.foreground, 0.12)
             }
 
-            MouseArea {
-              id: rowMouse
-              anchors.fill: parent
-              enabled: !row.editing
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: function(mouse) {
-                if (mouse.x < row.zone) strip.toggleDone(modelData.id)
-                else strip.toggleTask(modelData.id)
-              }
-            }
+    MouseArea {
+      id: rowMouse
+      anchors.fill: parent
+      enabled: !row.editing
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: function(mouse) {
+        if (mouse.x < row.zone) strip.toggleDone(modelData.id)
+        else strip.toggleTask(modelData.id)
+      }
+    }
 
             // done / not-done marker (left zone)
             Rectangle {

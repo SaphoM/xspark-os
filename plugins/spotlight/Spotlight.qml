@@ -305,18 +305,19 @@ Item {
       }
     }
 
-    // Centered search card.
+    // Centered search bar. The field fills the top edge and the results flow
+    // beneath it as part of the same surface, split by an inset rule.
     BorderSurface {
-      id: card
+      id: surface
 
       anchors.centerIn: parent
       width: Math.min(720, panel.width - Style.space(96))
-      implicitHeight: content.implicitHeight + Style.spacing.lg * 2
+      implicitHeight: content.implicitHeight
       radius: Style.cornerRadius
       color: Util.alpha(Color.menu.background, 0.98)
       borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, 0.5)
 
-      // Swallow clicks so they never reach the scrim behind the card.
+      // Swallow clicks so they never reach the scrim behind the bar.
       MouseArea {
         anchors.fill: parent
       }
@@ -327,21 +328,21 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.margins: Style.spacing.lg
-        spacing: Style.spacing.sm
+        spacing: 0
 
-        Row {
+        Item {
           id: searchRow
 
           width: parent.width
-          spacing: Style.spacing.md
+          height: searchField.height + Style.spacing.md * 2
 
           Text {
             id: icon
 
+            anchors.left: parent.left
+            anchors.leftMargin: Style.spacing.lg
+            anchors.verticalCenter: parent.verticalCenter
             text: "󰍉"
-            height: searchField.height
-            verticalAlignment: Text.AlignVCenter
             color: Util.alpha(Color.menu.text, 0.6)
             font.family: Style.font.icon
             font.pixelSize: Style.font.title
@@ -350,9 +351,17 @@ Item {
           TextField {
             id: searchField
 
-            width: parent.width - icon.width - parent.spacing
+            anchors.left: icon.right
+            anchors.leftMargin: Style.spacing.md
+            anchors.right: parent.right
+            anchors.rightMargin: Style.spacing.lg
+            anchors.verticalCenter: parent.verticalCenter
             placeholderText: "Search apps, files, and folders"
             foreground: Color.menu.text
+            horizontalPadding: 0
+            background: Rectangle {
+              color: "transparent"
+            }
             Keys.priority: Keys.BeforeItem
             onTextChanged: {
               root.query = text
@@ -380,6 +389,22 @@ Item {
               }
             }
           }
+        }
+
+        // Inset rule between the search field and the results. It stops short
+        // of the sides so it reads as part of the bar rather than a full split.
+        Rectangle {
+          visible: resultsList.visible
+          x: Style.spacing.lg
+          width: parent.width - Style.spacing.lg * 2
+          height: 1
+          color: Util.alpha(Color.menu.text, 0.12)
+        }
+
+        // Top gap between the rule and the first result.
+        Item {
+          width: 1
+          height: resultsList.visible ? Style.spacing.sm : 0
         }
 
         // Results list.
@@ -488,13 +513,30 @@ Item {
           }
         }
 
+        // Bottom gap inside the bar, below the last result.
+        Item {
+          width: 1
+          height: resultsList.visible ? Style.spacing.sm : 0
+        }
+
         // "No results" hint once a search has completed.
-        Text {
-          visible: root.query.trim().length >= 2 && !root.searchPending && root.rows.length === 0
-          text: "No results"
-          color: Util.alpha(Color.menu.text, 0.6)
-          font.family: Style.font.family
-          font.pixelSize: Style.font.body
+        Item {
+          visible: noResults.visible
+          width: parent.width
+          height: noResults.implicitHeight + Style.spacing.lg * 1.5
+
+          Text {
+            id: noResults
+
+            anchors.left: parent.left
+            anchors.leftMargin: Style.spacing.lg
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.query.trim().length >= 2 && !root.searchPending && root.rows.length === 0
+            text: "No results"
+            color: Util.alpha(Color.menu.text, 0.6)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+          }
         }
       }
     }

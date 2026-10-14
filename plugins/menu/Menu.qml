@@ -120,19 +120,19 @@ Item {
   readonly property real rowReservedBorderLeft: Border.left(selectedBorderSpec)
   readonly property real rowReservedBorderRight: Border.right(selectedBorderSpec)
   readonly property int cornerRadius: Style.cornerRadius
-  property int contentMargin: Style.spacing.panelPadding
-  property int headerHeight: Math.max(Style.space(34), Style.font.title + Style.spacing.controlPaddingY * 2)
-  property int contentSpacing: Style.spacing.md
-  property int baseRowHeight: Math.max(Style.space(50), Style.font.body + Style.spacing.rowPaddingX * 2)
-  property int detailRowHeight: Math.max(Style.space(58), Style.font.body + Style.font.caption + Style.spacing.rowPaddingX * 2)
+  property int contentMargin: Style.space(12)
+  property int headerHeight: Math.max(Style.space(28), Style.font.title + Style.spacing.controlPaddingY * 2)
+  property int contentSpacing: Style.spacing.sm
+  property int baseRowHeight: Math.max(Style.space(40), Style.font.title + Style.spacing.controlPaddingY * 2)
+  property int detailRowHeight: Math.max(Style.space(46), Style.font.title + Style.font.caption + Style.spacing.controlPaddingY * 2)
   // How much of the first hidden row stays visible at the fold — enough to
   // read as a cut-off row rather than a bottom border.
   property int rowPeek: Math.round(baseRowHeight * 0.55)
-  property int rowSpacing: Style.spacing.xs
-  property int dividerHeight: Style.space(17)
+  property int rowSpacing: Style.spacing.xxs
+  property int dividerHeight: Style.space(14)
   property bool searchDivider: false
   property int layoutSerial: 0
-  property int cardWidth: Math.min(root.dmenuActive ? Style.space(root.dmenuWidth) : ((root.activeMenu === "trigger.capture.screenrecord" || root.activeMenu === "style.font") ? Style.space(520) : Style.space(300)), panel.width - Style.gapsOut * 2)
+  property int cardWidth: Math.min(root.dmenuActive ? Style.space(root.dmenuWidth) : ((root.activeMenu === "trigger.capture.screenrecord" || root.activeMenu === "style.font") ? Style.space(420) : Style.space(240)), panel.width - Style.gapsOut * 2)
   property int visibleRowsHeight: root.dmenuActive ? dmenuRowListHeight(layoutSerial, displayModel.count, filterText) : rowListHeight(layoutSerial, displayModel.count, filterText, searchDivider)
   property int cardHeight: root.dmenuActive
     ? Math.min(contentMargin * 2 + headerHeight + (mode === "input" ? 0 : contentSpacing + visibleRowsHeight), panel.height - Style.gapsOut * 2)
@@ -1192,7 +1192,7 @@ Item {
             color: root.foreground
             opacity: root.filterText ? 1 : 0.58
             font.family: root.fontFamily
-            font.pixelSize: Style.font.heading
+            font.pixelSize: Style.font.title
             elide: Text.ElideRight
           }
 
@@ -1274,20 +1274,20 @@ Item {
                 text: row.icon
                 color: row.hasCursor ? root.selectedText : root.foreground
                 font.family: row.iconFont.length > 0 ? row.iconFont : root.fontFamily
-                font.pixelSize: Style.font.iconLarge
-                width: Style.space(36)
+                font.pixelSize: Style.font.icon
+                width: Style.space(28)
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 anchors.left: parent.left
-                anchors.leftMargin: root.rowReservedBorderLeft + Style.space(8)
+                anchors.leftMargin: root.rowReservedBorderLeft + Style.space(6)
                 y: contentColumn.y + labelText.y + (labelText.height - height) / 2
               }
 
               Image {
                 id: appIconImage
                 visible: row.isApp
-                width: Style.font.iconLarge
-                height: Style.font.iconLarge
+                width: Style.font.icon
+                height: Style.font.icon
                 fillMode: Image.PreserveAspectFit
                 // Decode at physical pixels — a logical-size decode leaves
                 // PNG icons upscaled and blurry on HiDPI displays.
@@ -1296,18 +1296,18 @@ Item {
                 source: row.isApp && root.appLibrary ? root.appLibrary.iconSource(row.appIcon) : ""
                 asynchronous: true
                 anchors.left: parent.left
-                anchors.leftMargin: root.rowReservedBorderLeft + Style.space(8) + (Style.space(36) - width) / 2
+                anchors.leftMargin: root.rowReservedBorderLeft + Style.space(6) + (Style.space(28) - width) / 2
                 y: contentColumn.y + labelText.y + (labelText.height - height) / 2
               }
 
               Column {
                 id: contentColumn
                 anchors.left: row.hasIcon ? iconText.right : parent.left
-                anchors.leftMargin: row.hasIcon ? Style.space(6) : root.rowReservedBorderLeft + Style.space(18)
+                anchors.leftMargin: row.hasIcon ? Style.space(4) : root.rowReservedBorderLeft + Style.space(12)
                 anchors.right: trail.left
-                anchors.rightMargin: Style.space(6)
+                anchors.rightMargin: Style.space(4)
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: Style.space(3)
+                spacing: Style.space(2)
 
                 Text {
                   id: labelText
@@ -1316,7 +1316,7 @@ Item {
                   text: row.label
                   color: row.hasCursor ? root.selectedText : root.foreground
                   font.family: root.fontFamily
-                  font.pixelSize: Style.font.heading
+                  font.pixelSize: Style.font.title
                   font.weight: Font.Medium
                   elide: Text.ElideRight
                 }
@@ -1329,16 +1329,16 @@ Item {
                   color: root.foreground
                   opacity: 0.52
                   font.family: root.fontFamily
-                  font.pixelSize: Style.font.bodySmall
+                  font.pixelSize: Style.font.caption
                   elide: Text.ElideRight
                 }
               }
 
               Row {
                 id: trail
-                width: Style.space(14)
+                width: Style.space(12)
                 anchors.right: parent.right
-                anchors.rightMargin: root.rowReservedBorderRight + Style.space(8)
+                anchors.rightMargin: root.rowReservedBorderRight + Style.space(6)
                 y: contentColumn.y + labelText.y + (labelText.height - height) / 2
                 spacing: 0
 
@@ -1359,7 +1359,7 @@ Item {
                   color: row.hasCursor ? root.selectedText : root.foreground
                   opacity: row.kind === "menu" || row.kind === "link" ? 0.36 : 0
                   font.family: root.fontFamily
-                  font.pixelSize: Style.font.heading
+                  font.pixelSize: Style.font.title
                   font.weight: Font.Normal
                   anchors.verticalCenter: parent.verticalCenter
                 }
@@ -1367,9 +1367,9 @@ Item {
 
               Rectangle {
                 anchors.left: parent.left
-                anchors.leftMargin: root.rowReservedBorderLeft + Style.space(18)
+                anchors.leftMargin: root.rowReservedBorderLeft + Style.space(12)
                 anchors.right: parent.right
-                anchors.rightMargin: root.rowReservedBorderRight + Style.space(8)
+                anchors.rightMargin: root.rowReservedBorderRight + Style.space(6)
                 anchors.bottom: parent.bottom
                 height: 0.5
                 visible: row.index < displayModel.count - 1
@@ -1435,7 +1435,7 @@ Item {
 
           Column {
             anchors.centerIn: parent
-            spacing: Style.space(8)
+            spacing: Style.space(6)
             visible: displayModel.count === 0 && root.mode !== "input"
 
             Text {
@@ -1443,9 +1443,9 @@ Item {
               color: root.selectedText
               opacity: 0.8
               font.family: root.fontFamily
-              font.pixelSize: Style.font.displayLarge
+              font.pixelSize: Style.font.display
               horizontalAlignment: Text.AlignHCenter
-              width: Style.space(320)
+              width: Style.space(200)
             }
 
             Text {
@@ -1456,7 +1456,7 @@ Item {
               font.family: root.fontFamily
               font.pixelSize: Style.font.title
               horizontalAlignment: Text.AlignHCenter
-              width: Style.space(320)
+              width: Style.space(200)
             }
           }
         }
