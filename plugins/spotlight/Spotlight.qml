@@ -50,6 +50,7 @@ Item {
       searchField.forceActiveFocus()
       root.runSearch()
     })
+    badgeClearProc.running = true
     console.log("xspark.spotlight open")
   }
 
@@ -274,6 +275,17 @@ Item {
     onExited: function(code) {
       if (root.runningSerial === root.searchSerial) root.mergeResults(root.searchSerial)
     }
+  }
+
+  Process {
+    id: badgeClearProc
+
+    command: ["python3", "-c",
+      "import json,os; p=os.path.expanduser('~/.local/state/omarchy/omadock-badges.json'); " +
+      "d=json.load(open(p)) if os.path.exists(p) else {'counts':{},'seen':[]}; " +
+      "d.setdefault('counts',{}).pop('xspark-spotlight',None); " +
+      "json.dump(d,open(p,'w'))"]
+    running: false
   }
 
   // ---------------------------------------------------------------- window

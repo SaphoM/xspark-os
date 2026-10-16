@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "xspark.menu",
   "name": "Apple menu",
-  "version": "26",
+  "version": "27",
   "author": "X Spark",
   "description": "Mac-style drop-down menu anchored under the top-left Apple icon",
   "kinds": [
