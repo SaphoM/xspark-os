@@ -53,6 +53,7 @@ o.bind("CTRL + LEFT", "Previous Workspace", hl.dsp.focus({ workspace = "e-1" }))
 o.bind("CTRL + RIGHT", "Next Workspace", hl.dsp.focus({ workspace = "e+1" }))
 o.bind("CTRL + UP", "Mission Control", "omarchy-mac-mission-control")
 o.bind("F3", "Mission Control", "omarchy-mac-mission-control")
+o.bind("F4", "Launchpad / Spotlight", "omarchy-shell shell toggle xspark.spotlight")
 o.bind("CTRL + DOWN", "App Exposé", "omarchy-mac-app-expose")
 
 -- ============================================================
@@ -71,3 +72,43 @@ o.bind("SUPER + SHIFT + 5", "Screenshot UI", "omarchy-menu toggle capture")
 -- Dock (Cmd+Opt+D toggles, like macOS)
 o.bind("SUPER + ALT + D", "Toggle Dock", "omarchy-shell omadock toggleVisibility")
 o.bind("SUPER + ALT + SHIFT + D", "Dock Settings", "omarchy-shell omadock openSettings")
+
+
+-- ============================================================
+-- UNIVERSAL TEXT SHORTCUTS (Cmd = Super) — application-aware
+-- ============================================================
+
+local function send_shortcut_once(mods, key)
+  return function()
+    hl.dispatch(hl.dsp.send_key_state({ mods = mods, key = key, state = "down" }))
+    hl.timer(function()
+      hl.dispatch(hl.dsp.send_key_state({ mods = mods, key = key, state = "up" }))
+    end, { timeout = 50, type = "oneshot" })
+  end
+end
+
+local function active_window_is_terminal()
+  local window = hl.get_active_window()
+  if not window or not window.class then return false end
+  local cls = string.lower(window.class)
+  return cls:find("foot", 1, true) ~= nil
+      or cls:find("kitty", 1, true) ~= nil
+      or cls:find("ghostty", 1, true) ~= nil
+      or cls:find("alacritty", 1, true) ~= nil
+end
+
+o.bind("SUPER + Z", "Universal undo", function()
+  if active_window_is_terminal() then return end
+  send_shortcut_once("CTRL", "Z")()
+end)
+o.bind("SUPER + SHIFT + Z", "Universal redo", function()
+  if active_window_is_terminal() then return end
+  send_shortcut_once("CTRL SHIFT", "Z")()
+end)
+o.bind("SUPER + A", "Universal select all", function()
+  if active_window_is_terminal() then
+    send_shortcut_once("CTRL SHIFT", "A")()
+    return
+  end
+  send_shortcut_once("CTRL", "A")()
+end)

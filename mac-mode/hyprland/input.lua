@@ -27,7 +27,8 @@ end
 
 local vconsole = read_vconsole()
 local kb_layout = vconsole.XKBLAYOUT or "gb"
-local kb_variant = vconsole.XKBVARIANT or ""
+local kb_variant = vconsole.XKBVARIANT
+if not kb_variant or kb_variant == "" then kb_variant = "mac_intl" end
 -- Empty: Caps Lock works as a normal caps lock (was compose:caps, which made
 -- it a Compose key so caps toggling never worked).
 local kb_options = ""
@@ -39,7 +40,7 @@ hl.config({
   input = {
     kb_layout = kb_layout,
     kb_variant = kb_variant,
-    kb_model = "apple",
+    kb_model = "applealu_iso",
     kb_options = kb_options,
     kb_rules = "",
 
