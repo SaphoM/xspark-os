@@ -46,6 +46,27 @@ o.bind("SUPER + ALT + M", "Minimize App Windows", "omarchy-mac-winops hide")
 o.bind("SUPER + ALT + ESCAPE", "Force Quit", "omarchy-mac-force-quit")
 
 -- ============================================================
+-- MOUSE (Cmd+click)
+-- ============================================================
+
+-- Cmd+drag still moves/resizes windows (Omarchy default binds).
+-- Cmd+click (no drag) = Ctrl+click, matching macOS:
+--   - Browsers: open link in new tab
+--   - File managers: multi-select
+-- drag_threshold lets the click bind and the drag bind share SUPER+LMB:
+-- move past threshold = drag, release within threshold = click.
+hl.config({ binds = { drag_threshold = 10 } })
+
+-- Down/up split works around Hyprland send_shortcut sometimes leaving
+-- synthetic state stuck (same workaround as default/hypr/bindings/clipboard.lua).
+o.bind("SUPER + mouse:272", "Cmd+click → Ctrl+click", function()
+  hl.dispatch(hl.dsp.send_key_state({ mods = "CTRL", key = "mouse:272", state = "down" }))
+  hl.timer(function()
+    hl.dispatch(hl.dsp.send_key_state({ mods = "CTRL", key = "mouse:272", state = "up" }))
+  end, { timeout = 10, type = "oneshot" })
+end, { click = true })
+
+-- ============================================================
 -- WORKSPACES / MISSION CONTROL / APP EXPOSÉ
 -- ============================================================
 

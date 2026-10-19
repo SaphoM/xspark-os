@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "xspark.macbar",
   "name": "MacBar",
-  "version": "28",
+  "version": "29",
   "author": "X Spark",
   "description": "Mac-style menu bar for Omarchy",
   "kinds": ["bar"],

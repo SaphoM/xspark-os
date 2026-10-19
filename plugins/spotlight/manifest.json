@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "xspark.spotlight",
   "name": "Spotlight",
-  "version": "28",
+  "version": "29",
   "author": "X Spark",
   "description": "macOS-style Spotlight search: a rounded search field that floats in the middle of the screen",
   "kinds": [
